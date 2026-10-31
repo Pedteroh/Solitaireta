@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Paciência">
+  <rect width="512" height="512" rx="112" fill="#1F6B4A"/>
+  <g transform="rotate(-15 256 270)">
+    <rect x="152" y="112" width="208" height="292" rx="30" fill="#9AD8B8"/>
+    <path transform="translate(318 366) rotate(0) scale(.62)" d="M36 66C12 47 6 34 6 24c0-9 7-16 15-16 6 0 11 3 15 9 4-6 9-9 15-9 8 0 15 7 15 16 0 10-6 23-30 42z" fill="#E5484D" stroke="#E5484D" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <g transform="rotate(9 256 270)">
+    <rect x="152" y="112" width="208" height="292" rx="30" fill="#FFFFFF"/>
+    <path transform="translate(176 138) scale(.62)" d="M36 6C22 22 7 31 7 45c0 8 6 14 14 14 5 0 9-2 12-6-1 7-3 11-8 15h22c-5-4-7-8-8-15 3 4 7 6 12 6 8 0 14-6 14-14C65 31 50 22 36 6z" fill="#14402D" stroke="#14402D" stroke-width="6" stroke-linejoin="round"/>
+    <path transform="translate(256 268) scale(2.5) translate(-36 -38)" d="M36 6C22 22 7 31 7 45c0 8 6 14 14 14 5 0 9-2 12-6-1 7-3 11-8 15h22c-5-4-7-8-8-15 3 4 7 6 12 6 8 0 14-6 14-14C65 31 50 22 36 6z" fill="#14402D" stroke="#14402D" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+</svg>
