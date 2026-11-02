@@ -1,0 +1,2539 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paciência</title>
+<meta name="description" content="Klondike, Spider, FreeCell, Pyramid e TriPeaks em um só app, com visual de vidro líquido. Funciona offline e pode ser instalado.">
+<meta name="theme-color" content="#0b0f13">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Paciência">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  /* Layout: same family as the Tarefas/Hábitos/Diário app: near-black base, teal aurora, mint accent, cyan greeting,
+     pill chips, dark cards with a colored left edge, floating glass dock plus a round button and a mint FAB.
+     Performance rule: backdrop blur only on a few small chrome pieces; cards get glass from gradients and rim light. */
+  :root {
+    --base: #0b0f13;
+    --mint: #52d6a3;
+    --mint-ink: #05261a;
+    --cyan: #62cbea;
+    --coral: #f0766a;
+    --amber: #f0b44c;
+    --violet: #b690f6;
+    --fg: #e9eef1;
+    --dim: #8c99a5;
+    --line: rgba(255, 255, 255, 0.12);
+    --surface: rgba(22, 29, 37, 0.78);
+    --ink: #11202b;
+    --rose: #d93a4e;
+    --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: var(--base); height: 100%; }
+  body {
+    min-height: 100%;
+    background: var(--base);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.4;
+    padding-block: 14px 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+  .app { max-width: 520px; margin: 0 auto; position: relative; z-index: 1; padding-bottom: 120px; }
+
+  /* static aurora, one composited layer that drifts slowly (no blur filters) */
+  .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .bg::before {
+    content: ""; position: absolute; inset: -20%;
+    background:
+      radial-gradient(48% 34% at 12% 8%, rgba(38, 150, 118, 0.55), transparent 70%),
+      radial-gradient(40% 30% at 92% 46%, rgba(60, 120, 150, 0.4), transparent 70%),
+      radial-gradient(46% 30% at 30% 98%, rgba(140, 150, 40, 0.2), transparent 70%);
+    animation: drift 40s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  @keyframes drift { to { transform: translate3d(3%, 2%, 0) scale(1.05); } }
+
+  /* liquid glass for small chrome only */
+  .glass {
+    position: relative;
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.04) 60%, rgba(255, 255, 255, 0.09));
+    -webkit-backdrop-filter: blur(14px) saturate(1.5);
+    backdrop-filter: blur(14px) saturate(1.5);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38), inset 0 -1px 0 rgba(255, 255, 255, 0.05), 0 8px 22px rgba(0, 0, 0, 0.35);
+  }
+  .glass::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: radial-gradient(120% 80% at 14% -12%, rgba(255, 255, 255, 0.16), transparent 55%);
+  }
+  .glass > * { position: relative; z-index: 1; }
+  svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- Menu ---------- */
+  .hero { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding-block: 4px 18px; }
+  .avatar { position: relative; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: var(--mint); }
+  .avatar > svg.i { width: 30px; height: 30px; fill: currentColor; stroke: none; }
+  .avatar .moon { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%; background: #1b2230; border: 1px solid var(--line); display: grid; place-items: center; color: var(--violet); z-index: 2; }
+  .avatar .moon svg { width: 13px; height: 13px; }
+  #greet { margin: 0; color: var(--cyan); font-size: clamp(21px, 6vw, 28px); line-height: 1.12; min-width: 0; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; }
+  .ringbox { display: grid; justify-items: center; gap: 4px; }
+  .ring { position: relative; width: 56px; height: 56px; display: grid; place-items: center; }
+  .ring svg.r { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .ring .in { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); color: var(--cyan); }
+  .ring .in svg { width: 20px; height: 20px; }
+  .ringbox span { font-size: 13px; color: var(--dim); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .datetile { width: 62px; height: 62px; border-radius: 20px; display: grid; place-content: center; text-align: center; line-height: 1.05; }
+  .datetile span { font-size: 10px; letter-spacing: 0.05em; white-space: nowrap; font-weight: 700; color: var(--cyan); }
+  .datetile b { font-size: 27px; font-weight: 800; }
+
+
+  /* title block */
+  .title { display: grid; justify-items: center; text-align: center; gap: 4px; padding-block: 10px 22px; }
+  .title h1 { margin: 0; font-size: clamp(40px, 12.5vw, 56px); line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: var(--cyan); text-shadow: 0 6px 30px rgba(98, 203, 234, 0.35); }
+  .title p { margin: 0; color: var(--dim); font-size: 14px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; }
+  .fan { position: relative; width: 150px; height: 112px; margin-bottom: 8px; }
+  .fc {
+    position: absolute; left: 50%; top: 6px; width: 66px; height: 94px; margin-left: -33px; border-radius: 10px;
+    background: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(233, 243, 247, 0.96) 50%, rgba(207, 225, 233, 0.95));
+    border: 1px solid rgba(255, 255, 255, 0.75); color: var(--ink); font-style: normal;
+    box-shadow: inset 0 1px 0 #fff, inset 0 -10px 14px rgba(110, 170, 190, 0.2), 0 8px 18px rgba(0, 0, 0, 0.45);
+    display: grid; align-content: start; justify-items: start; padding: 5px 8px; line-height: 1;
+    transform-origin: 50% 120%; overflow: hidden;
+  }
+  .fc::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(118deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 40%); }
+  .fc b { font-size: 22px; font-weight: 800; position: relative; }
+  .fc span { font-size: 40px; position: absolute; right: 8px; bottom: 6px; }
+  .fc.red { color: var(--rose); background: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(252, 238, 240, 0.96) 50%, rgba(243, 214, 220, 0.95)); }
+  .fc.l { transform: rotate(-17deg) translateX(-30px); }
+  .fc.r { transform: rotate(-1deg); }
+  .fc.m { transform: rotate(15deg) translateX(30px); }
+
+  .sec { display: flex; align-items: baseline; gap: 10px; padding: 0 4px 10px; }
+  .sec b { font-size: 15px; letter-spacing: 0.08em; color: var(--mint); font-weight: 800; text-transform: uppercase; }
+  .sec span { color: var(--dim); font-size: 14px; }
+  .sec em { margin-left: auto; font-style: normal; color: var(--dim); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .stack { display: grid; gap: 12px; }
+  .row-card {
+    position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px;
+    width: 100%; text-align: left; padding: 14px 14px 14px 16px;
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--mint));
+    border-radius: 24px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 16px rgba(0, 0, 0, 0.28);
+    transition: transform 0.12s, border-color 0.15s;
+  }
+  button.row-card:active { transform: scale(0.985); }
+  button.row-card:hover { border-color: rgba(255, 255, 255, 0.28); border-left-color: var(--c, var(--mint)); }
+  .chk { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.4); display: grid; place-items: center; color: var(--mint-ink); }
+  .chk.on { background: var(--mint); border-color: var(--mint); }
+  .chk svg { width: 18px; height: 18px; stroke-width: 3; }
+  .rc-main { display: grid; gap: 7px; min-width: 0; }
+  .rc-title { display: flex; align-items: center; gap: 10px; }
+  .rc-title b { font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .pips { display: inline-flex; gap: 4px; }
+  .pips i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--c, var(--mint)); display: block; }
+  .pips i.on { background: var(--c, var(--mint)); }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { font-style: normal; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; color: var(--c, var(--mint)); background: color-mix(in srgb, var(--c, var(--mint)) 16%, transparent); }
+  .rc-rec { font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .go { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: var(--c, var(--mint)); background: color-mix(in srgb, var(--c, var(--mint)) 14%, transparent); }
+  .go svg { width: 18px; height: 18px; }
+  .resume { --c: var(--mint); border-color: rgba(82, 214, 163, 0.4); background: linear-gradient(135deg, rgba(82, 214, 163, 0.18), var(--surface) 70%); }
+  .promise { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 20px; border: 1px dashed rgba(255, 255, 255, 0.22); color: var(--dim); font-size: 13.5px; }
+  .promise svg { width: 18px; height: 18px; color: var(--mint); flex: none; }
+  .stats { display: grid; gap: 6px; margin: 0; }
+  .stats div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+  .stats dt { color: var(--dim); }
+  .stats dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .help-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--dim); font-size: 14px; }
+  .help-list b { color: var(--fg); }
+
+  /* docks */
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; pointer-events: none;
+    padding-top: 6px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(14px, env(safe-area-inset-left, 0px));
+    padding-right: max(14px, env(safe-area-inset-right, 0px));
+  }
+  .dockrow { max-width: 520px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+  .dockbar { pointer-events: auto; flex: 1; min-width: 0; display: grid; gap: 4px; padding: 6px; border-radius: 99px; }
+  .dockbar.c3 { grid-template-columns: repeat(3, 1fr); }
+  .dockbar.c4 { grid-template-columns: repeat(4, 1fr); }
+  .dk {
+    display: grid; justify-items: center; gap: 3px; padding: 8px 2px 7px; min-width: 0;
+    background: none; border: 1px solid transparent; border-radius: 99px; font-size: 12px; font-weight: 700;
+    color: var(--dim); transition: background 0.15s, color 0.15s, opacity 0.15s, transform 0.12s; white-space: nowrap;
+  }
+  .dk svg { width: 24px; height: 24px; }
+  .dk:active:not(:disabled) { transform: scale(0.95); background: rgba(255, 255, 255, 0.14); color: var(--fg); }
+  .dk:disabled { opacity: 0.35; cursor: default; }
+  .dk.on { color: var(--mint); background: rgba(82, 214, 163, 0.16); border-color: rgba(82, 214, 163, 0.4); }
+  .dk.arm { color: var(--amber); background: rgba(240, 180, 76, 0.18); border-color: rgba(240, 180, 76, 0.4); }
+  .dk .ic { position: relative; display: grid; }
+  .bd { position: absolute; top: -5px; right: -10px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: var(--mint); color: var(--mint-ink); font-style: normal; font-size: 10.5px; font-weight: 800; line-height: 16px; text-align: center; }
+  .bd:empty { display: none; }
+  .round { pointer-events: auto; flex: none; width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; padding: 0; color: var(--fg); }
+  .round svg { width: 28px; height: 28px; }
+  .round:disabled { opacity: 0.4; cursor: default; }
+  .fab {
+    position: fixed; z-index: 21; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+    display: inline-flex; align-items: center; gap: 10px; padding: 16px 24px; border: 0; border-radius: 99px;
+    background: var(--mint); color: var(--mint-ink); font-weight: 800; font-size: 18px;
+    box-shadow: 0 10px 30px rgba(82, 214, 163, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    transition: transform 0.12s;
+  }
+  .fab:active { transform: scale(0.96); }
+  .fab svg { width: 22px; height: 22px; stroke-width: 2.6; }
+
+  /* ---------- Game ---------- */
+  .gtop { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; padding-block: 0 8px; }
+  .icon-btn { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; padding: 0; }
+  .icon-btn svg { width: 22px; height: 22px; }
+  .gtitle { display: grid; gap: 3px; min-width: 0; line-height: 1; }
+  .gtitle b { color: var(--cyan); font-size: 25px; font-weight: 800; letter-spacing: -0.01em; }
+  .tile { min-width: 64px; height: 50px; padding: 0 12px; border-radius: 18px; display: grid; place-content: center; text-align: center; line-height: 1.05; }
+  .tile span { font-size: 10px; letter-spacing: 0.1em; font-weight: 700; color: var(--cyan); }
+  .tile b { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .gsub { padding: 0 4px 14px; color: var(--dim); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .board { position: relative; width: 100%; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .slot, .card { position: absolute; left: 0; top: 0; width: var(--cw); height: var(--ch); border-radius: calc(var(--cw) * 0.12); }
+  .slot {
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+    display: grid; place-items: center;
+    font-size: calc(var(--cw) * 0.5); color: rgba(255, 255, 255, 0.2);
+  }
+  .slot[data-stock] { cursor: pointer; color: rgba(255, 255, 255, 0.45); }
+  .slot[data-stock].dead { cursor: default; opacity: 0.4; }
+
+  /* glass cards: tinted gradient body, rim light, specular sheen */
+  .card {
+    background: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(233, 243, 247, 0.96) 50%, rgba(207, 225, 233, 0.95));
+    color: var(--ink);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 1px 0 #fff, inset 0 -10px 14px rgba(110, 170, 190, 0.2), 0 3px 8px rgba(0, 0, 0, 0.4);
+    transition: transform var(--dur, 0.2s) cubic-bezier(0.2, 0.7, 0.2, 1);
+    touch-action: none; cursor: pointer;
+  }
+  .card.red { color: var(--rose); background: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(252, 238, 240, 0.96) 50%, rgba(243, 214, 220, 0.95)); box-shadow: inset 0 1px 0 #fff, inset 0 -10px 14px rgba(220, 120, 140, 0.18), 0 3px 8px rgba(0, 0, 0, 0.4); }
+  .card::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(118deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 40%);
+  }
+  .card.flat { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+  .card.dragging { transition: none; will-change: transform; box-shadow: inset 0 1px 0 #fff, 0 16px 28px rgba(0, 0, 0, 0.55); }
+  .face { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; }
+  .corner {
+    position: absolute; left: 8%; top: 3%;
+    display: flex; align-items: baseline; gap: 0.05em;
+    font-weight: 800; font-size: calc(var(--cw) * 0.36); line-height: 1.15; letter-spacing: -0.03em;
+  }
+  .corner i { font-style: normal; font-size: 0.84em; letter-spacing: 0; }
+  .pip { position: absolute; right: 9%; bottom: 5%; font-size: calc(var(--cw) * 0.56); line-height: 1; }
+  .card.down {
+    background-color: #15404c;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px),
+      repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px),
+      linear-gradient(150deg, rgba(112, 232, 200, 0.7), rgba(36, 110, 130, 0.85) 48%, rgba(30, 40, 100, 0.95));
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -8px 12px rgba(0, 0, 0, 0.25), 0 3px 8px rgba(0, 0, 0, 0.4);
+  }
+  .card.down.flat { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+  .card.down .face { display: none; }
+  .card.down::before { background: linear-gradient(118deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 45%); }
+  .card.down::after { content: ""; position: absolute; inset: 9%; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: calc(var(--cw) * 0.07); }
+  .hint { outline: 3px solid var(--mint); outline-offset: 1px; animation: pulse 0.55s ease-in-out 3; }
+  @keyframes pulse { 50% { outline-color: rgba(82, 214, 163, 0.2); } }
+  .nope { animation: nope 0.3s linear; }
+  @keyframes nope { 20% { translate: -4px 0; } 45% { translate: 4px 0; } 70% { translate: -3px 0; } }
+
+  #toast {
+    position: fixed; left: 50%; bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 8px); z-index: 40; opacity: 0; pointer-events: none;
+    padding: 10px 18px; border-radius: 99px; font-size: 14px; font-weight: 600; max-width: calc(100vw - 32px); text-align: center;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+    padding: 20px max(16px, env(safe-area-inset-left, 0px));
+    background: rgba(4, 8, 11, 0.62);
+  }
+  #overlay[data-pos="end"] { align-items: end; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .panel { width: min(380px, 100%); border-radius: 30px; padding: 24px 22px 20px; display: grid; gap: 14px; background-color: rgba(18, 25, 32, 0.78); }
+  .eyebrow { margin: 0; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mint); font-weight: 800; }
+  .panel h2 { margin: 0; color: var(--cyan); font-size: 36px; line-height: 1.05; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; }
+  .panel p { margin: 0; color: var(--dim); }
+  .panel dl { margin: 0; border-top: 1px solid var(--line); }
+  .panel dl div { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  .panel dt { color: var(--dim); }
+  .panel dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .panel .row { display: grid; gap: 8px; }
+  .panel ul { margin: 0; padding-left: 18px; color: var(--dim); display: grid; gap: 4px; }
+  .btn { padding: 13px 16px; border-radius: 99px; font-weight: 700; font-size: 15px; text-align: center; background: rgba(255, 255, 255, 0.09); border: 1px solid rgba(255, 255, 255, 0.2); transition: transform 0.12s; }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary { background: var(--mint); color: var(--mint-ink); border-color: var(--mint); }
+  .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.2); border-top-color: var(--mint); animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .wait { text-align: left; justify-items: start; display: grid; gap: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card, #toast, .row-card, .btn, .dk, .fab { transition: none; }
+    .hint, .nope, .spinner, .bg::before { animation: none; }
+  }
+
+  /* ---------- v5: game tiles, card states ---------- */
+  .games { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .gtile {
+    position: relative; aspect-ratio: 1 / 1; min-width: 0; display: grid; align-content: space-between; justify-items: start; text-align: left;
+    padding: 16px 16px 14px; border-radius: 28px; border: 1px solid var(--line);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--c) 24%, rgba(22, 29, 37, 0.92)), rgba(22, 29, 37, 0.92) 62%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 20px rgba(0, 0, 0, 0.32);
+    transition: transform 0.12s, border-color 0.15s;
+  }
+  .gtile:active { transform: scale(0.97); }
+  .gtile:hover { border-color: color-mix(in srgb, var(--c) 55%, transparent); }
+  .gtile:last-child:nth-child(odd) { grid-column: 1 / -1; justify-self: center; width: calc(50% - 6px); }
+  .gt-art { width: 58px; height: 58px; color: var(--c); }
+  .gt-art svg { width: 100%; height: 100%; }
+  .gt-name { font-size: 22px; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+  .gt-sub { font-size: 12.5px; color: var(--dim); font-weight: 600; margin-top: 2px; display: block; }
+  .gt-badge { position: absolute; top: 14px; right: 14px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--mint); color: var(--mint-ink); }
+  .gt-badge svg { width: 15px; height: 15px; stroke-width: 3; }
+  .card.gone { display: none; }
+  .card.dim::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgba(6, 12, 18, 0.4); pointer-events: none; }
+  .card.sel { outline: 3px solid var(--mint); outline-offset: 1px; }
+  .help-block { display: grid; gap: 6px; }
+  .help-block h3 { margin: 0; font-size: 18px; font-weight: 800; color: var(--c, var(--cyan)); }
+  .gtitle b { font-size: 24px; }
+
+  /* ---------- v6: settings, progress ---------- */
+  .gt-live { display: inline-block; margin-top: 3px; font-size: 12px; font-weight: 800; color: var(--mint-ink); background: var(--mint); padding: 2px 9px; border-radius: 99px; }
+  .sec2 { padding-top: 10px; }
+  .sumgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .sum { border-radius: 20px; padding: 12px 6px; display: grid; gap: 2px; justify-items: center; text-align: center; }
+  .sum b { font-size: 22px; font-weight: 800; color: var(--cyan); font-variant-numeric: tabular-nums; }
+  .sum span { font-size: 11.5px; color: var(--dim); font-weight: 600; }
+  .ach { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 22px; border: 1px solid var(--line); background: var(--surface); opacity: 0.72; }
+  .ach.on { opacity: 1; border-color: rgba(82, 214, 163, 0.4); }
+  .ach .chk { width: 34px; height: 34px; color: var(--dim); }
+  .ach .chk.on { color: var(--mint-ink); }
+  .ach-main { display: grid; gap: 3px; min-width: 0; }
+  .ach-main b { font-size: 16px; font-weight: 800; }
+  .ach-main span { font-size: 13px; color: var(--dim); }
+  .ach-main em { font-style: normal; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .bar { display: block; height: 5px; border-radius: 99px; background: rgba(255, 255, 255, 0.1); overflow: hidden; margin-top: 3px; }
+  .bar i { display: block; height: 100%; background: var(--mint); border-radius: inherit; }
+  .sw { position: relative; width: 50px; height: 30px; border-radius: 99px; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.2); transition: background 0.15s; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+  .sw.on { background: var(--mint); border-color: var(--mint); }
+  .sw.on::after { transform: translateX(20px); }
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 3px; border-radius: 99px; background: rgba(255, 255, 255, 0.07); }
+  .seg button { padding: 8px 4px; border-radius: 99px; font-size: 13px; font-weight: 700; color: var(--dim); }
+  .seg button.on { background: var(--mint); color: var(--mint-ink); }
+  .row-card.cfg { --c: var(--cyan); }
+  .row-card.danger { --c: #ff6b6b; }
+
+  /* ---------- v7: gear, polish ---------- */
+  #menu { position: relative; }
+  .gear { position: absolute; top: 10px; left: 0; z-index: 2; color: var(--fg); transition: transform 0.12s, color 0.15s, background 0.15s; }
+  .gear:active { transform: scale(0.94); }
+  .gear.on { color: var(--mint); border-color: rgba(82, 214, 163, 0.5); background: rgba(82, 214, 163, 0.16); }
+  .gear.on svg { transform: rotate(60deg); }
+  .gear svg { transition: transform 0.3s; }
+  .row-card.one { grid-template-columns: minmax(0, 1fr); }
+  .row-card.two { grid-template-columns: minmax(0, 1fr) auto; }
+  .gtile::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: radial-gradient(120% 70% at 12% 0%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 55%); }
+  .gt-art { filter: drop-shadow(0 4px 14px color-mix(in srgb, var(--c) 45%, transparent)); }
+  .gt-live { display: inline-flex; align-items: center; gap: 6px; }
+  .gt-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--mint-ink); }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .gtile, .sum, .ach { animation: rise 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .gtile:nth-child(2), .sum:nth-child(2) { animation-delay: 0.05s; }
+  .gtile:nth-child(3), .sum:nth-child(3) { animation-delay: 0.1s; }
+  .gtile:nth-child(4), .sum:nth-child(4) { animation-delay: 0.15s; }
+  .gtile:nth-child(5) { animation-delay: 0.2s; }
+  .mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; margin-top: 4px; }
+  .mini div { display: grid; gap: 1px; }
+  .mini b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .mini span { font-size: 11.5px; color: var(--dim); font-weight: 600; }
+  .title { padding-block: 6px 18px; }
+  .sec b { font-size: 14px; }
+  @media (prefers-reduced-motion: reduce) { .gtile, .sum, .ach { animation: none; } .gear svg { transition: none; } }
+  .seg button { border: 0; background: transparent; box-shadow: none; }
+  .seg button.on { background: var(--mint); color: var(--mint-ink); }
+  .mini div { align-content: start; }
+
+  /* ---------- v8: themes ---------- */
+  :root {
+    --surf-solid: rgba(22, 29, 37, 0.92);
+    --panel: rgba(18, 25, 32, 0.78);
+    --a1: rgba(38, 150, 118, 0.55); --a2: rgba(60, 120, 150, 0.4); --a3: rgba(140, 150, 40, 0.2);
+    --face: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(233, 243, 247, 0.96) 50%, rgba(207, 225, 233, 0.95));
+    --face-red: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(252, 238, 240, 0.96) 50%, rgba(243, 214, 220, 0.95));
+    --back-c: #15404c;
+    --back-img: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px), linear-gradient(150deg, rgba(112, 232, 200, 0.7), rgba(36, 110, 130, 0.85) 48%, rgba(30, 40, 100, 0.95));
+    --back-line: rgba(255, 255, 255, 0.5);
+  }
+  .bg::before { background: radial-gradient(48% 34% at 12% 8%, var(--a1), transparent 70%), radial-gradient(40% 30% at 92% 46%, var(--a2), transparent 70%), radial-gradient(46% 30% at 30% 98%, var(--a3), transparent 70%); }
+  .gtile { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 24%, var(--surf-solid)), var(--surf-solid) 62%); }
+  .panel { background-color: var(--panel); }
+  .card { background: var(--face); }
+  .card.red { background: var(--face-red); }
+  .card.down { background-color: var(--back-c); background-image: var(--back-img); }
+  .card.down::after { border-color: var(--back-line); }
+  .dk.on, .gear.on { background: color-mix(in srgb, var(--mint) 16%, transparent); border-color: color-mix(in srgb, var(--mint) 45%, transparent); }
+  .ach.on { border-color: color-mix(in srgb, var(--mint) 40%, transparent); }
+  .rw { display: inline-flex; align-items: center; gap: 5px; width: fit-content; font-size: 12px; font-weight: 700; color: var(--mint); background: color-mix(in srgb, var(--mint) 14%, transparent); padding: 2px 9px; border-radius: 99px; margin-top: 2px; }
+  .rw.done { opacity: 0.75; }
+  html[data-suits="4"] .card.s2 { color: #2f6fe4; background: var(--face); }
+  html[data-suits="4"] .card.s3 { color: #1b9a52; }
+
+  .themes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
+  .th { position: relative; display: grid; align-content: start; text-align: left; padding: 0; overflow: hidden; border-radius: 18px; border: 2px solid var(--line); background: var(--surf-solid); }
+  .th .pv { position: relative; height: 56px; display: block; }
+  .th .pv i { position: absolute; bottom: 8px; width: 20px; height: 28px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.5); }
+  .th .pv i.a { left: 10px; transform: rotate(-8deg); }
+  .th .pv i.b { left: 26px; transform: rotate(6deg); }
+  .th .pv em { position: absolute; right: 10px; top: 10px; width: 12px; height: 12px; border-radius: 50%; }
+  .th b { font-size: 13.5px; font-weight: 800; padding: 7px 9px 0; }
+  .th small { font-size: 11px; color: var(--dim); font-weight: 600; padding: 0 9px 9px; line-height: 1.25; min-height: 2.5em; }
+  .th.on { border-color: var(--mint); }
+  .th.on small { color: var(--mint); }
+  .th.lock .pv { filter: saturate(0.35) brightness(0.65); }
+  .th.lock .pv::after { content: ""; position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='11' width='12' height='9' rx='2'/%3E%3Cpath d='M9 11V8a3 3 0 0 1 6 0v3'/%3E%3C/svg%3E"); }
+  .ver { text-align: center; color: var(--dim); font-size: 13px; font-weight: 600; padding: 8px 0 0; display: grid; gap: 2px; }
+  .ver b { color: var(--fg); font-weight: 800; }
+
+  html[data-theme="oceano"] { --base: #050d17; --mint: #4fd8e6; --mint-ink: #03242a; --cyan: #8fcfff; --surface: rgba(13, 26, 41, 0.78); --surf-solid: rgba(13, 26, 41, 0.92); --panel: rgba(11, 22, 36, 0.9);
+    --a1: rgba(20, 110, 190, 0.55); --a2: rgba(30, 170, 180, 0.38); --a3: rgba(70, 70, 170, 0.3);
+    --back-c: #0e3550; --back-img: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.15) 0 1px, transparent 1px 6px), linear-gradient(150deg, rgba(90, 210, 240, 0.75), rgba(20, 90, 150, 0.88) 48%, rgba(10, 30, 90, 0.95)); }
+  html[data-theme="floresta"] { --base: #080f0a; --mint: #9bd86e; --mint-ink: #11240a; --cyan: #c4e8a8; --surface: rgba(18, 31, 21, 0.78); --surf-solid: rgba(18, 31, 21, 0.92); --panel: rgba(15, 27, 18, 0.9);
+    --a1: rgba(50, 140, 60, 0.55); --a2: rgba(120, 130, 40, 0.35); --a3: rgba(30, 110, 90, 0.3);
+    --back-c: #1f4a2a; --back-img: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px), linear-gradient(150deg, rgba(150, 220, 120, 0.7), rgba(40, 110, 60, 0.85) 48%, rgba(20, 60, 40, 0.95)); }
+  html[data-theme="cassino"] { --base: #06110b; --mint: #e8bb55; --mint-ink: #2b1d03; --cyan: #f3d98f; --surface: rgba(13, 28, 20, 0.8); --surf-solid: rgba(13, 28, 20, 0.93); --panel: rgba(11, 24, 17, 0.9);
+    --a1: rgba(26, 140, 80, 0.85); --a2: rgba(18, 110, 70, 0.6); --a3: rgba(26, 120, 70, 0.5);
+    --face: linear-gradient(155deg, #fffdf6, #f4ecd6 50%, #e6dab8); --face-red: linear-gradient(155deg, #fffaf6, #f7e8d8 50%, #ead5bb);
+    --back-c: #5a1424; --back-img: repeating-linear-gradient(45deg, rgba(232, 187, 85, 0.24) 0 1px, transparent 1px 7px), repeating-linear-gradient(-45deg, rgba(232, 187, 85, 0.24) 0 1px, transparent 1px 7px), linear-gradient(150deg, rgba(160, 40, 60, 0.8), rgba(90, 18, 36, 0.9) 50%, rgba(50, 8, 22, 0.95)); --back-line: rgba(232, 187, 85, 0.75); }
+  html[data-theme="poente"] { --base: #120a14; --mint: #ff8f6b; --mint-ink: #2e0d03; --cyan: #ffc690; --surface: rgba(34, 20, 36, 0.78); --surf-solid: rgba(34, 20, 36, 0.93); --panel: rgba(30, 17, 32, 0.9);
+    --a1: rgba(200, 60, 110, 0.55); --a2: rgba(250, 130, 50, 0.35); --a3: rgba(110, 60, 190, 0.4);
+    --back-c: #3a1a54; --back-img: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px 7px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px 7px), linear-gradient(150deg, rgba(255, 150, 100, 0.85), rgba(190, 60, 120, 0.85) 50%, rgba(60, 30, 120, 0.95)); }
+  html[data-theme="neon"] { --base: #05030b; --mint: #ff4fd8; --mint-ink: #1f0018; --cyan: #35e8ff; --line: rgba(255, 255, 255, 0.14); --surface: rgba(16, 9, 30, 0.82); --surf-solid: rgba(16, 9, 30, 0.94); --panel: rgba(14, 8, 26, 0.92);
+    --a1: rgba(255, 40, 200, 0.34); --a2: rgba(30, 200, 255, 0.3); --a3: rgba(120, 60, 255, 0.3);
+    --ink: #35e8ff; --rose: #ff4fd8;
+    --face: linear-gradient(155deg, #1a0f35, #0c0720); --face-red: linear-gradient(155deg, #1a0f35, #0c0720);
+    --back-c: #140a2c; --back-img: repeating-linear-gradient(0deg, rgba(53, 232, 255, 0.35) 0 1px, transparent 1px 9px), repeating-linear-gradient(90deg, rgba(255, 79, 216, 0.3) 0 1px, transparent 1px 9px), linear-gradient(150deg, rgba(40, 20, 90, 0.9), rgba(10, 5, 30, 0.95)); --back-line: rgba(255, 79, 216, 0.7); }
+  html[data-theme="neon"] .card { border-color: rgba(53, 232, 255, 0.7); box-shadow: 0 0 10px rgba(53, 232, 255, 0.3), 0 3px 8px rgba(0, 0, 0, 0.5); }
+  html[data-theme="neon"] .card.red { border-color: rgba(255, 79, 216, 0.7); box-shadow: 0 0 10px rgba(255, 79, 216, 0.3), 0 3px 8px rgba(0, 0, 0, 0.5); }
+  html[data-theme="neon"] .card.flat { box-shadow: none; }
+  html[data-theme="neon"] .card::before { background: linear-gradient(118deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 40%); }
+  html[data-theme="neon"] .card.down { border-color: rgba(255, 79, 216, 0.6); }
+  html[data-theme="neon"] .title h1 { text-shadow: 0 0 22px rgba(53, 232, 255, 0.6); }
+  html[data-theme="papel"] { --base: #ece4d4; --fg: #2a2620; --dim: #6f6657; --mint: #2c5fd6; --mint-ink: #ffffff; --cyan: #1c3f9c; --line: rgba(40, 30, 10, 0.16);
+    --surface: rgba(255, 252, 246, 0.86); --surf-solid: rgba(255, 252, 246, 0.96); --panel: rgba(250, 246, 238, 0.96);
+    --a1: rgba(255, 255, 255, 0.85); --a2: rgba(250, 210, 140, 0.45); --a3: rgba(150, 180, 240, 0.35);
+    --face: linear-gradient(155deg, #fffefb, #f7f2e6 55%, #ece3cf); --face-red: linear-gradient(155deg, #fffefb, #f7f2e6 55%, #ece3cf);
+    --back-c: #2c4a9c; --back-img: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.2) 0 1px, transparent 1px 7px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.2) 0 1px, transparent 1px 7px), linear-gradient(150deg, rgba(90, 130, 230, 0.9), rgba(40, 70, 160, 0.95));
+    color-scheme: light; }
+  html[data-theme="papel"] .glass { background: linear-gradient(140deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.6)); border-color: rgba(40, 30, 10, 0.14); box-shadow: inset 0 1px 0 #fff, 0 6px 16px rgba(60, 40, 10, 0.15); }
+  html[data-theme="papel"] .glass::after { display: none; }
+  html[data-theme="papel"] .btn { background: rgba(40, 30, 10, 0.07); border-color: rgba(40, 30, 10, 0.18); }
+  html[data-theme="papel"] .btn.primary { background: var(--mint); border-color: var(--mint); }
+  html[data-theme="papel"] .seg, html[data-theme="papel"] .bar { background: rgba(40, 30, 10, 0.1); }
+  html[data-theme="papel"] .sw { background: rgba(40, 30, 10, 0.18); border-color: rgba(40, 30, 10, 0.2); }
+  html[data-theme="papel"] .sw.on { background: var(--mint); border-color: var(--mint); }
+  html[data-theme="papel"] .slot { background: rgba(40, 30, 10, 0.05); border-color: rgba(40, 30, 10, 0.2); box-shadow: inset 0 2px 6px rgba(40, 30, 10, 0.12); color: rgba(40, 30, 10, 0.25); }
+  html[data-theme="papel"] .card { border-color: rgba(40, 30, 10, 0.28); box-shadow: 0 2px 6px rgba(60, 40, 10, 0.3); }
+  html[data-theme="papel"] .card.flat { box-shadow: none; }
+  html[data-theme="papel"] .card::before { background: linear-gradient(118deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 40%); }
+  html[data-theme="papel"] .chk { border-color: rgba(40, 30, 10, 0.3); }
+  html[data-theme="papel"] .dk:active:not(:disabled) { background: rgba(40, 30, 10, 0.1); }
+  html[data-theme="papel"] .title h1 { text-shadow: none; }
+  html[data-theme="papel"] .th .pv i { border-color: rgba(40, 30, 10, 0.3); }
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true"></div>
+
+<main class="app">
+  <section id="menu">
+    <button class="icon-btn glass gear" id="btnCfg" type="button" aria-label="Ajustes" aria-pressed="false">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+    <header class="title">
+      <div class="fan" aria-hidden="true">
+        <i class="fc l"><b>A</b><span>&#9824;&#xFE0E;</span></i>
+        <i class="fc r red"><b>K</b><span>&#9829;&#xFE0E;</span></i>
+        <i class="fc m"><b>Q</b><span>&#9827;&#xFE0E;</span></i>
+      </div>
+      <h1>Paciência</h1>
+      <p>Cinco jogos de cartas</p>
+      <button class="btn primary" id="btnInstall" type="button" style="margin-top: 12px" hidden>Instalar app</button>
+      <p id="iosHint" style="margin-top: 10px; text-transform: none; letter-spacing: 0; font-size: 13px; max-width: 30ch" hidden>No iPhone, toque em Compartilhar e depois em Adicionar à Tela de Início para instalar.</p>
+    </header>
+
+    <div id="tabPlay" class="stack">
+      <div class="sec"><b>Escolha o jogo</b><em id="secCount">0/5</em></div>
+      <div class="games" id="games"></div>
+    </div>
+
+    <div id="tabRec" class="stack" hidden>
+      <div class="sec"><b>Progresso</b><span>suas estatísticas</span></div>
+      <div id="recList" class="stack"></div>
+      <div class="sec sec2"><b>Conquistas</b><em id="achCount">0/13</em></div>
+      <div id="achList" class="stack"></div>
+    </div>
+
+    <div id="tabCfg" class="stack" hidden>
+      <div class="sec"><b>Ajustes</b></div>
+      <div id="cfgList" class="stack"></div>
+    </div>
+
+    <div id="tabHelp" class="stack" hidden>
+      <div class="sec"><b>Como jogar</b></div>
+      <div id="helpList" class="stack"></div>
+    </div>
+  </section>
+
+  <section id="game" hidden>
+    <header class="gtop">
+      <button class="icon-btn glass" id="btnBack" type="button" aria-label="Voltar ao menu">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <div class="gtitle"><b id="lvName"></b></div>
+      <div class="tile glass"><span>TEMPO</span><b id="hTime">0:00</b></div>
+      <div class="tile glass"><span>PONTOS</span><b id="hScore">0</b></div>
+    </header>
+    <div class="gsub" id="lvRules"></div>
+    <div class="board" id="board"></div>
+  </section>
+</main>
+
+<nav class="dock" id="mdock">
+  <div class="dockrow">
+    <div class="dockbar c3 glass">
+      <button class="dk tab on" type="button" data-tab="Play">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="10" height="14" rx="2"/><path d="M9 21h8a2 2 0 0 0 2-2V8"/></svg><span>Jogar</span>
+      </button>
+      <button class="dk tab" type="button" data-tab="Rec">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a3 3 0 0 0 4 2.8M16 6h4v1a3 3 0 0 1-4 2.8M12 13v4M8 21h8M10 17h4"/></svg><span>Progresso</span>
+      </button>
+      <button class="dk tab" type="button" data-tab="Help">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg><span>Ajuda</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<nav class="dock" id="dock" hidden>
+  <div class="dockrow">
+    <div class="dockbar c4 glass">
+      <button class="dk" id="btnNew" type="button">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span id="lNew">Novo</span>
+      </button>
+      <button class="dk" id="btnHint" type="button">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span>Dica</span>
+      </button>
+      <button class="dk" id="btnUndoAll" type="button">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span>Reiniciar</span>
+      </button>
+      <button class="dk" id="btnUndo" type="button">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Desfazer</span>
+      </button>
+    </div>
+  </div>
+</nav>
+<div id="toast" class="glass" role="status" aria-live="polite"></div>
+<div id="overlay" role="dialog" aria-modal="true" hidden></div>
+
+<script>
+function solverFactory() {
+  function red(c) { var s = c >> 4; return s === 1 || s === 2; }
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function deal() {
+    var d = [], s, r, c, k;
+    for (s = 0; s < 4; s++) for (r = 1; r <= 13; r++) d.push(s * 16 + r);
+    shuffle(d);
+    var tab = [], ups = [];
+    for (c = 0; c < 7; c++) { tab.push([]); ups.push(1); }
+    for (c = 0; c < 7; c++) for (k = 0; k <= c; k++) tab[c].push(d.pop());
+    return { tab: tab, ups: ups, stock: d, waste: [], found: [0, 0, 0, 0], pass: 1 };
+  }
+  function canTab(c, pile) {
+    if (!pile.length) return (c & 15) === 13;
+    var t = pile[pile.length - 1];
+    return red(t) !== red(c) && (t & 15) === (c & 15) + 1;
+  }
+  function canF(c, s) { return s.found[c >> 4] === (c & 15) - 1; }
+  function won(s) { return s.found[0] + s.found[1] + s.found[2] + s.found[3] === 52; }
+
+  function gen(s, passes) {
+    var out = [], w = s.waste.length ? s.waste[s.waste.length - 1] : -1, p, q, i, emptyDone;
+    if (w >= 0) {
+      if (canF(w, s)) out.push({ k: 'wf', pr: 100, r: w & 15 });
+      emptyDone = false;
+      for (q = 0; q < 7; q++) {
+        if (!s.tab[q].length) { if (emptyDone) continue; emptyDone = true; }
+        if (canTab(w, s.tab[q])) out.push({ k: 'wt', q: q, pr: s.tab[q].length ? 60 : 55 });
+      }
+    }
+    for (p = 0; p < 7; p++) {
+      var pile = s.tab[p], n = pile.length;
+      if (!n) continue;
+      var first = n - s.ups[p];
+      if (canF(pile[n - 1], s)) out.push({ k: 'tf', p: p, pr: first > 0 && first === n - 1 ? 95 : 90, r: pile[n - 1] & 15 });
+      for (i = first; i < n; i++) {
+        var card = pile[i], below = i > 0 ? pile[i - 1] : -1;
+        var reveals = (i === first && i > 0);
+        if (!(i === first || (below >= 0 && canF(below, s)))) continue;
+        emptyDone = false;
+        for (q = 0; q < 7; q++) {
+          if (q === p) continue;
+          if (!s.tab[q].length) {
+            if (i === 0) continue;
+            if (emptyDone) continue;
+            emptyDone = true;
+          }
+          if (!canTab(card, s.tab[q])) continue;
+          out.push({ k: 'tt', p: p, i: i, q: q, pr: reveals ? 75 : (i === 0 ? 45 : 50) });
+        }
+      }
+    }
+    if (s.stock.length || (s.waste.length && s.pass < passes)) out.push({ k: 'd', pr: 10 });
+    out.sort(function (a, b) { return b.pr - a.pr; });
+    return out;
+  }
+  function reveal(n, p) { if (n.ups[p] === 0 && n.tab[p].length > 0) n.ups[p] = 1; }
+  function apply(s, m, draw) {
+    var n = { tab: s.tab.slice(), ups: s.ups.slice(), stock: s.stock, waste: s.waste, found: s.found.slice(), pass: s.pass };
+    var c, pile, moved;
+    if (m.k === 'wf') {
+      c = s.waste[s.waste.length - 1]; n.waste = s.waste.slice(0, -1); n.found[c >> 4]++;
+    } else if (m.k === 'wt') {
+      c = s.waste[s.waste.length - 1]; n.waste = s.waste.slice(0, -1);
+      n.tab[m.q] = s.tab[m.q].concat([c]); n.ups[m.q] = s.ups[m.q] + 1;
+    } else if (m.k === 'tf') {
+      pile = s.tab[m.p]; c = pile[pile.length - 1];
+      n.tab[m.p] = pile.slice(0, -1); n.ups[m.p] = s.ups[m.p] - 1; reveal(n, m.p); n.found[c >> 4]++;
+    } else if (m.k === 'tt') {
+      pile = s.tab[m.p]; moved = pile.slice(m.i);
+      n.tab[m.p] = pile.slice(0, m.i); n.ups[m.p] = s.ups[m.p] - moved.length; reveal(n, m.p);
+      n.tab[m.q] = s.tab[m.q].concat(moved); n.ups[m.q] = s.ups[m.q] + moved.length;
+    } else {
+      if (s.stock.length) {
+        var k = Math.min(draw, s.stock.length);
+        n.stock = s.stock.slice(0, s.stock.length - k);
+        n.waste = s.waste.concat(s.stock.slice(s.stock.length - k).reverse());
+      } else {
+        n.stock = s.waste.slice().reverse(); n.waste = []; n.pass = s.pass + 1;
+      }
+    }
+    return n;
+  }
+  function key(s) {
+    return s.tab.map(function (p) { return p.join(','); }).join('|') + '#' + s.ups.join('') + '#' +
+      s.stock.join(',') + '#' + s.waste.join(',') + '#' + s.found.join(',') + '#' + s.pass;
+  }
+  function autoWin(s) {
+    if (s.stock.length || s.waste.length) return false;
+    for (var p = 0; p < 7; p++) if (s.ups[p] !== s.tab[p].length) return false;
+    var f = s.found.slice(), tabs = s.tab.map(function (x) { return x.length; }), moved = true;
+    while (moved) {
+      moved = false;
+      for (p = 0; p < 7; p++) {
+        if (tabs[p] > 0) {
+          var c = s.tab[p][tabs[p] - 1];
+          if (f[c >> 4] === (c & 15) - 1) { f[c >> 4]++; tabs[p]--; moved = true; }
+        }
+      }
+    }
+    return f[0] + f[1] + f[2] + f[3] === 52;
+  }
+
+  function solve(s0, cfg) {
+    var seen = {}, nodes = 0, limit = cfg.nodes, passes = Math.min(cfg.passes, 6), aborted = false;
+    function dfs(s) {
+      if (won(s) || autoWin(s)) return true;
+      if (++nodes > limit) { aborted = true; return false; }
+      var ms = gen(s, passes);
+      if (ms.length && (ms[0].k === 'wf' || ms[0].k === 'tf') && ms[0].r <= 2) ms = [ms[0]];
+      for (var i = 0; i < ms.length; i++) {
+        var ns = apply(s, ms[i], cfg.draw), k = key(ns);
+        if (seen[k]) continue;
+        seen[k] = 1;
+        if (dfs(ns)) return true;
+        if (aborted) return false;
+      }
+      return false;
+    }
+    seen[key(s0)] = 1;
+    return dfs(s0);
+  }
+
+  function greedy(s, cfg) {
+    var idle = 0, limitIdle = Math.ceil(52 / cfg.draw) * 2 + 4, steps = 0;
+    while (steps++ < 4000) {
+      if (won(s) || autoWin(s)) return true;
+      var ms = gen(s, cfg.passes), m = null, i;
+      for (i = 0; i < ms.length; i++) { if (ms[i].k !== 'd' && ms[i].pr >= 55) { m = ms[i]; break; } }
+      if (m) idle = 0;
+      else {
+        for (i = 0; i < ms.length; i++) if (ms[i].k === 'd') { m = ms[i]; break; }
+        if (!m) return false;
+        if (++idle > limitIdle) return false;
+      }
+      s = apply(s, m, cfg.draw);
+    }
+    return false;
+  }
+
+
+  var KCFG = { draw: 1, passes: 1e9, nodes: 30000, minMoves: 2 };
+  function genKlondike() {
+    for (;;) {
+      var s = deal();
+      var g = gen(s, KCFG.passes), cnt = 0, i;
+      for (i = 0; i < g.length; i++) if (g[i].k !== 'd') cnt++;
+      if (cnt < KCFG.minMoves) continue;
+      var ok = false;
+      try { ok = solve(s, KCFG); } catch (err) { ok = false; }
+      if (ok) return { tab: s.tab, stock: s.stock };
+    }
+  }
+
+  // ===== shared helpers for Pyramid and TriPeaks =====
+  function deck52() {
+    var d = [], s, r;
+    for (s = 0; s < 4; s++) for (r = 1; r <= 13; r++) d.push(s * 16 + r);
+    return shuffle(d);
+  }
+  var FULL = 268435455;
+
+  // ===== Pyramid =====
+  var PL = [], PR = [];
+  (function () {
+    var r, k, i = 0;
+    for (r = 0; r < 7; r++) for (k = 0; k <= r; k++) {
+      if (r < 6) { PL[i] = (r + 1) * (r + 2) / 2 + k; PR[i] = PL[i] + 1; } else { PL[i] = -1; PR[i] = -1; }
+      i++;
+    }
+  })();
+  function pyramidSolve(pyr, stock0, passesMax, limit) {
+    var nodes = 0, aborted = false, seen = {};
+    function freeList(mask) {
+      var out = [], i;
+      for (i = 0; i < 28; i++) {
+        if ((mask >> i) & 1) continue;
+        if (PL[i] < 0 || (((mask >> PL[i]) & 1) && ((mask >> PR[i]) & 1))) out.push(i);
+      }
+      return out;
+    }
+    function dfs(mask, stock, waste, pass) {
+      if (mask === FULL) return true;
+      if (++nodes > limit) { aborted = true; return false; }
+      var free = freeList(mask), i, j, tries = [];
+      for (i = 0; i < free.length; i++) {
+        if ((pyr[free[i]] & 15) === 13) { tries = [[mask | (1 << free[i]), stock, waste, pass]]; break; }
+      }
+      if (!tries.length) {
+        for (i = 0; i < free.length; i++) for (j = i + 1; j < free.length; j++) {
+          if ((pyr[free[i]] & 15) + (pyr[free[j]] & 15) === 13) tries.push([mask | (1 << free[i]) | (1 << free[j]), stock, waste, pass]);
+        }
+        if (waste.length) {
+          var w = waste[waste.length - 1], wr = w & 15;
+          if (wr === 13) tries.push([mask, stock, waste.slice(0, -1), pass]);
+          for (i = 0; i < free.length; i++) {
+            if ((pyr[free[i]] & 15) + wr === 13) tries.push([mask | (1 << free[i]), stock, waste.slice(0, -1), pass]);
+          }
+        }
+        if (stock.length) tries.push([mask, stock.slice(0, -1), waste.concat([stock[stock.length - 1]]), pass]);
+        else if (waste.length && pass < passesMax) tries.push([mask, waste.slice().reverse(), [], pass + 1]);
+      }
+      for (i = 0; i < tries.length; i++) {
+        var t = tries[i], k = t[0] + '|' + t[1].join(',') + '|' + t[2].join(',') + '|' + t[3];
+        if (seen[k]) continue;
+        seen[k] = 1;
+        if (dfs(t[0], t[1], t[2], t[3])) return true;
+        if (aborted) return false;
+      }
+      return false;
+    }
+    return dfs(0, stock0.slice(), [], 1);
+  }
+  function genPyramid() {
+    for (;;) {
+      var d = deck52(), pyr = d.slice(0, 28), stock = d.slice(28);
+      var ok = false;
+      try { ok = pyramidSolve(pyr, stock, 3, 60000); } catch (err) { ok = false; }
+      if (ok) return { pyr: pyr, stock: stock };
+    }
+  }
+
+  // ===== TriPeaks =====
+  var TL = [], TR = [];
+  (function () {
+    var i;
+    for (i = 0; i < 28; i++) { TL[i] = -1; TR[i] = -1; }
+    for (i = 0; i < 3; i++) { TL[i] = 3 + 2 * i; TR[i] = 3 + 2 * i + 1; }
+    for (i = 0; i < 6; i++) { TL[3 + i] = 9 + (i >> 1) * 3 + (i & 1); TR[3 + i] = TL[3 + i] + 1; }
+    for (i = 0; i < 9; i++) { TL[9 + i] = 18 + i; TR[9 + i] = 18 + i + 1; }
+  })();
+  function adj(a, b) { var d = Math.abs((a & 15) - (b & 15)); return d === 1 || d === 12; }
+  function tripeaksSolve(pk, stock0, first, limit) {
+    var nodes = 0, aborted = false, seen = {};
+    function dfs(mask, stock, curc) {
+      if (mask === FULL) return true;
+      if (++nodes > limit) { aborted = true; return false; }
+      var i, tries = [];
+      for (i = 0; i < 28; i++) {
+        if ((mask >> i) & 1) continue;
+        if (TL[i] >= 0 && !(((mask >> TL[i]) & 1) && ((mask >> TR[i]) & 1))) continue;
+        if (adj(pk[i], curc)) tries.push([mask | (1 << i), stock, pk[i]]);
+      }
+      if (stock.length) tries.push([mask, stock.slice(0, -1), stock[stock.length - 1]]);
+      for (i = 0; i < tries.length; i++) {
+        var t = tries[i], k = t[0] + '|' + t[1].length + '|' + t[2];
+        if (seen[k]) continue;
+        seen[k] = 1;
+        if (dfs(t[0], t[1], t[2])) return true;
+        if (aborted) return false;
+      }
+      return false;
+    }
+    return dfs(0, stock0.slice(), first);
+  }
+  function genTripeaks() {
+    for (;;) {
+      var d = deck52(), pk = d.slice(0, 28), first = d[28], stock = d.slice(29);
+      var ok = false;
+      try { ok = tripeaksSolve(pk, stock, first, 120000); } catch (err) { ok = false; }
+      if (ok) return { pk: pk, stock: stock, first: first };
+    }
+  }
+
+  function generate(game) {
+    if (game === 'pyramid') return genPyramid();
+    if (game === 'tripeaks') return genTripeaks();
+    return genKlondike();
+  }
+
+  if (typeof self !== 'undefined' && typeof document === 'undefined') {
+    self.onmessage = function (e) {
+      var game = e.data.game;
+      self.postMessage({ game: game, deal: generate(game) });
+    };
+  }
+  return { generate: generate };
+}
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  var SUITS = ['♠', '♥', '♦', '♣'].map(function (s) { return s + '︎'; });
+  var SUIT_NAMES = ['espadas', 'copas', 'ouros', 'paus'];
+  var RANKS = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  var RANK_NAMES = ['', 'Ás', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Valete', 'Dama', 'Rei'];
+
+  function $(id) { return document.getElementById(id); }
+  var board = $('board'), menu = $('menu'), game = $('game'), overlay = $('overlay'), dock = $('dock'), mdock = $('mdock');
+
+  // ---------- engine state ----------
+  var cur = null, S = null, history = [], initialJSON = '';
+  var started = false, elapsed = 0, startTime = 0, timerId = null;
+  var busy = false, ended = false, stuckShown = false, startToken = 0;
+  var W = 0, cw = 0, ch = 0, gap = 4;
+  var els = new Map(), pos = new Map(), st = new Map(), slotEls = {}, slotSt = {};
+  var down = null, raf = 0, lastE = null;
+  var newArmed = false, newTimer = null, toastT = null, tab = 'Play', lastGame = 'klondike';
+
+  var KEY = 'paciencia-recordes-v2', KEY2 = 'paciencia-ultimo-v2';
+  var rec = {};
+  try { rec = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { rec = {}; }
+  try { var lg = localStorage.getItem(KEY2); if (lg) lastGame = lg; } catch (e) {}
+  function saveRec() { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) {} }
+  function fmt(sec) { var m = Math.floor(sec / 60), s = sec % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
+
+  function isRed(s) { return s === 1 || s === 2; }
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function deckInts() {
+    var d = [], s, r;
+    for (s = 0; s < 4; s++) for (r = 1; r <= 13; r++) d.push(s * 16 + r);
+    return shuffle(d);
+  }
+  function mk(c) { return { id: (c >> 4) * 13 + (c & 15) - 1, s: c >> 4, r: c & 15, up: false }; }
+  function xCol(i) { return i * (cw + gap); }
+  function setPos(el, x, y) { el.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)'; }
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { t.classList.remove('show'); }, 2400);
+  }
+
+  // cascade layout shared by the column games
+  function cascadeCols(piles, xOf, topY, items, bottoms, o) {
+    var top = board.getBoundingClientRect().top + window.scrollY;
+    var maxH = Math.max(ch * 3.8, document.documentElement.clientHeight - top - topY - (o.reserve || 130));
+    var dstep = ch * o.d, ustep = ch * o.u;
+    piles.forEach(function (pile) {
+      var d = 0, u = 0;
+      pile.forEach(function (c) { if (c.up) u++; else d++; });
+      var fit = (maxH - ch - d * dstep) / Math.max(1, u - 1);
+      if (fit < ustep) ustep = fit;
+    });
+    ustep = Math.max(ch * o.min, Math.min(ch * o.u, ustep));
+    var maxB = topY + ch * 2.2;
+    piles.forEach(function (pile, p) {
+      var y = topY;
+      pile.forEach(function (c, i) {
+        items.push({ c: c, x: xOf(p), y: y, z: i + 1 });
+        bottoms[p] = y + ch;
+        y += c.up ? ustep : dstep;
+      });
+      if (!pile.length) bottoms[p] = topY + ch;
+      if (bottoms[p] > maxB) maxB = bottoms[p];
+    });
+    return maxB;
+  }
+  function pilesItems(pile, x, y, items, zBase, flatAll) {
+    pile.forEach(function (c, j) {
+      items.push({ c: c, x: x, y: y, z: zBase + j, flat: flatAll ? j < pile.length - 1 : false });
+    });
+  }
+
+  /* =====================================================================
+     KLONDIKE (compra 1, recompra ilimitada)
+     ===================================================================== */
+  var K = (function () {
+    var tabTop = 0, colBottom = [0, 0, 0, 0, 0, 0, 0];
+    function canTab(card, pile) {
+      if (!pile.length) return card.r === 13;
+      var t = pile[pile.length - 1];
+      return t.up && isRed(t.s) !== isRed(card.s) && t.r === card.r + 1;
+    }
+    function canFound(card, s) { return s.found[card.s].length === card.r - 1; }
+    function find(s, uid) {
+      var i, p;
+      for (i = 0; i < s.stock.length; i++) if (s.stock[i].id === uid) return { t: 's', i: i };
+      for (i = 0; i < s.waste.length; i++) if (s.waste[i].id === uid) return { t: 'w', i: i };
+      for (p = 0; p < 4; p++) for (i = 0; i < s.found[p].length; i++) if (s.found[p][i].id === uid) return { t: 'f', p: p, i: i };
+      for (p = 0; p < 7; p++) for (i = 0; i < s.tab[p].length; i++) if (s.tab[p][i].id === uid) return { t: 't', p: p, i: i };
+      return null;
+    }
+    function listMoves(s) {
+      var out = [];
+      var w = s.waste[s.waste.length - 1];
+      if (w) {
+        if (canFound(w, s)) out.push({ src: { t: 'w' }, dst: { t: 'f', p: w.s }, prio: 100 });
+        s.tab.forEach(function (pile, p) {
+          if (canTab(w, pile)) out.push({ src: { t: 'w' }, dst: { t: 't', p: p }, prio: pile.length ? 60 : 55 });
+        });
+      }
+      s.tab.forEach(function (pile, c) {
+        pile.forEach(function (card, i) {
+          if (!card.up) return;
+          var below = i > 0 ? pile[i - 1] : null;
+          var reveals = !!(below && !below.up);
+          if (i === pile.length - 1 && canFound(card, s)) {
+            out.push({ src: { t: 't', p: c, i: i }, dst: { t: 'f', p: card.s }, prio: 90 + (reveals ? 5 : 0) });
+          }
+          s.tab.forEach(function (tp, p) {
+            if (p === c || !canTab(card, tp)) return;
+            if (i === 0 && tp.length === 0) return;
+            var prio;
+            if (reveals) prio = 75;
+            else if (i === 0) prio = 45;
+            else if (below && canFound(below, s)) prio = 50;
+            else return;
+            out.push({ src: { t: 't', p: c, i: i }, dst: { t: 't', p: p }, prio: prio });
+          });
+        });
+      });
+      return out;
+    }
+    function srcCards(s, src) {
+      if (src.t === 'w') return [s.waste[s.waste.length - 1]];
+      if (src.t === 'f') return [s.found[src.p][s.found[src.p].length - 1]];
+      return s.tab[src.p].slice(src.i);
+    }
+    function applyMove(s, src, dst) {
+      var cards;
+      if (src.t === 'w') cards = [s.waste.pop()];
+      else if (src.t === 'f') cards = [s.found[src.p].pop()];
+      else cards = s.tab[src.p].splice(src.i);
+      if (dst.t === 'f') {
+        s.found[cards[0].s].push(cards[0]);
+        if (src.t !== 'f') s.score += 10;
+      } else {
+        for (var i = 0; i < cards.length; i++) s.tab[dst.p].push(cards[i]);
+        if (src.t === 'w') s.score += 5;
+        else if (src.t === 'f') s.score = Math.max(0, s.score - 15);
+      }
+      if (src.t === 't') {
+        var pile = s.tab[src.p], top = pile[pile.length - 1];
+        if (top && !top.up) { top.up = true; s.score += 5; }
+      }
+      s.idle = 0;
+    }
+    function draw(s) {
+      if (s.stock.length) {
+        var c = s.stock.pop(); c.up = true; s.waste.push(c);
+      } else if (s.waste.length) {
+        while (s.waste.length) { var w = s.waste.pop(); w.up = false; s.stock.push(w); }
+        s.pass++;
+      } else return false;
+      s.idle = (s.idle || 0) + 1;
+      return true;
+    }
+    function grab(s, uid) {
+      var loc = find(s, uid);
+      if (!loc || loc.t === 's') return null;
+      if (loc.t === 'w') return loc.i === s.waste.length - 1 ? { cards: [s.waste[loc.i]], from: { t: 'w' } } : null;
+      if (loc.t === 'f') return loc.i === s.found[loc.p].length - 1 ? { cards: [s.found[loc.p][loc.i]], from: { t: 'f', p: loc.p } } : null;
+      var card = s.tab[loc.p][loc.i];
+      if (!card.up) return null;
+      return { cards: s.tab[loc.p].slice(loc.i), from: { t: 't', p: loc.p, i: loc.i } };
+    }
+    return {
+      id: 'klondike', name: 'Klondike', solver: true,
+      init: function (d) {
+        if (!d) {
+          var deck = deckInts(), tabInts = [[], [], [], [], [], [], []], c, k;
+          for (c = 0; c < 7; c++) for (k = 0; k <= c; k++) tabInts[c].push(deck.pop());
+          d = { tab: tabInts, stock: deck };
+        }
+        var tabs = d.tab.map(function (pile) { return pile.map(function (c, i) { var x = mk(c); x.up = i === pile.length - 1; return x; }); });
+        return { stock: d.stock.map(mk), waste: [], found: [[], [], [], []], tab: tabs, score: 0, moves: 0, pass: 1, idle: 0 };
+      },
+      cards: function (s) {
+        var all = s.stock.concat(s.waste);
+        s.found.forEach(function (p) { all = all.concat(p); });
+        s.tab.forEach(function (p) { all = all.concat(p); });
+        return all;
+      },
+      layout: function (Wd) {
+        W = Wd;
+        gap = Math.max(4, Math.min(8, Math.round(W * 0.014)));
+        cw = (W - 6 * gap) / 7; ch = cw * 1.42;
+        tabTop = ch + Math.max(14, Math.round(ch * 0.22));
+      },
+      view: function (s) {
+        var items = [], slots = [], p;
+        var recyc = s.stock.length === 0 && s.waste.length > 0;
+        slots.push({ k: 'stock', x: xCol(6), y: 0, t: recyc ? '↻' : '', cls: (!s.stock.length && !s.waste.length) ? 'dead' : '', click: true });
+        slots.push({ k: 'waste', x: xCol(5), y: 0 });
+        for (p = 0; p < 4; p++) slots.push({ k: 'f' + p, x: xCol(p), y: 0, t: SUITS[p] });
+        for (p = 0; p < 7; p++) slots.push({ k: 't' + p, x: xCol(p), y: tabTop });
+        pilesItems(s.stock, xCol(6), 0, items, 1, true);
+        pilesItems(s.waste, xCol(5), 0, items, 100, true);
+        s.found.forEach(function (pile, i) { pilesItems(pile, xCol(i), 0, items, 1, true); });
+        var mb = cascadeCols(s.tab, xCol, tabTop, items, colBottom, { d: 0.13, u: 0.3, min: 0.25 });
+        return { items: items, slots: slots, h: mb + 6 };
+      },
+      grab: grab,
+      targets: function (s, grp) {
+        var out = [], first = grp.cards[0];
+        if (grp.cards.length === 1 && grp.from.t !== 'f' && canFound(first, s)) out.push({ x: xCol(first.s), y: 0, w: cw, h: ch, dst: { t: 'f', p: first.s } });
+        s.tab.forEach(function (pile, p) {
+          if (grp.from.t === 't' && p === grp.from.p) return;
+          if (!canTab(first, pile)) return;
+          out.push({ x: xCol(p), y: tabTop, w: cw, h: Math.max(ch, colBottom[p] - tabTop), dst: { t: 't', p: p } });
+        });
+        return out;
+      },
+      move: function (s, from, dst) { applyMove(s, from, dst); },
+      tap: function (s, uid) {
+        var loc = find(s, uid);
+        if (!loc) return false;
+        if (loc.t === 's') return draw(s);
+        var grp = grab(s, uid);
+        if (!grp) return false;
+        var card = grp.cards[0], from = grp.from, p, pile;
+        var isTop = from.t !== 't' || from.i === s.tab[from.p].length - 1;
+        if (isTop && from.t !== 'f' && canFound(card, s)) { applyMove(s, from, { t: 'f', p: card.s }); return true; }
+        for (p = 0; p < 7; p++) {
+          if (from.t === 't' && p === from.p) continue;
+          pile = s.tab[p];
+          if (pile.length && canTab(card, pile)) { applyMove(s, from, { t: 't', p: p }); return true; }
+        }
+        if (!(from.t === 't' && from.i === 0)) {
+          for (p = 0; p < 7; p++) {
+            if (from.t === 't' && p === from.p) continue;
+            if (!s.tab[p].length && canTab(card, s.tab[p])) { applyMove(s, from, { t: 't', p: p }); return true; }
+          }
+        }
+        return false;
+      },
+      slotTap: function (s, k) { if (k === 'stock') return draw(s); return false; },
+      won: function (s) { return s.found[0].length + s.found[1].length + s.found[2].length + s.found[3].length === 52; },
+      stuck: function (s) { return listMoves(s).length === 0 && (s.idle || 0) > s.stock.length + s.waste.length + 1; },
+      hint: function (s) {
+        var ms = listMoves(s).sort(function (a, b) { return b.prio - a.prio; });
+        if (ms.length) {
+          var m = ms[0], to;
+          if (m.dst.t === 'f') { var f = s.found[m.dst.p]; to = f.length ? { card: f[f.length - 1] } : { slot: 'f' + m.dst.p }; }
+          else { var t = s.tab[m.dst.p]; to = t.length ? { card: t[t.length - 1] } : { slot: 't' + m.dst.p }; }
+          return { from: srcCards(s, m.src), to: to };
+        }
+        if (s.stock.length || s.waste.length) {
+          var top = s.stock[s.stock.length - 1];
+          return { from: top ? [top] : [], to: { slot: 'stock' }, msg: 'Sem jogadas na mesa. Compre uma carta.' };
+        }
+        return null;
+      },
+      autoSafe: function (s) {
+        function safe(card) {
+          if (!canFound(card, s)) return false;
+          if (card.r <= 2) return true;
+          var o = isRed(card.s) ? [0, 3] : [1, 2];
+          return s.found[o[0]].length >= card.r - 1 && s.found[o[1]].length >= card.r - 1;
+        }
+        var w = s.waste[s.waste.length - 1];
+        if (w && safe(w)) { applyMove(s, { t: 'w' }, { t: 'f', p: w.s }); return true; }
+        for (var p = 0; p < 7; p++) {
+          var pile = s.tab[p], c = pile[pile.length - 1];
+          if (c && c.up && safe(c)) { applyMove(s, { t: 't', p: p, i: pile.length - 1 }, { t: 'f', p: c.s }); return true; }
+        }
+        return false;
+      },
+      autoReady: function (s) { return !s.stock.length && !s.waste.length && s.tab.every(function (p) { return p.every(function (c) { return c.up; }); }); },
+      autoStep: function (s) {
+        for (var p = 0; p < 7; p++) {
+          var pile = s.tab[p], c = pile[pile.length - 1];
+          if (c && canFound(c, s)) { applyMove(s, { t: 't', p: p, i: pile.length - 1 }, { t: 'f', p: c.s }); return true; }
+        }
+        return false;
+      },
+      info: function (s) { return s.moves + (s.moves === 1 ? ' jogada' : ' jogadas') + ' · passada ' + s.pass; }
+    };
+  })();
+
+  /* =====================================================================
+     FREECELL
+     ===================================================================== */
+  var F = (function () {
+    var tabTop = 0, colBottom = [0, 0, 0, 0, 0, 0, 0, 0];
+    function canPlace(card, col) {
+      if (!col.length) return true;
+      var t = col[col.length - 1];
+      return isRed(t.s) !== isRed(card.s) && t.r === card.r + 1;
+    }
+    function canF(card, s) { return s.found[card.s].length === card.r - 1; }
+    function find(s, uid) {
+      var i, p;
+      for (i = 0; i < 4; i++) if (s.cells[i] && s.cells[i].id === uid) return { t: 'e', p: i };
+      for (p = 0; p < 8; p++) for (i = 0; i < s.cols[p].length; i++) if (s.cols[p][i].id === uid) return { t: 'c', p: p, i: i };
+      for (p = 0; p < 4; p++) for (i = 0; i < s.found[p].length; i++) if (s.found[p][i].id === uid) return { t: 'f', p: p, i: i };
+      return null;
+    }
+    function runOK(col, i) {
+      for (var k = i; k < col.length - 1; k++) {
+        var a = col[k], b = col[k + 1];
+        if (isRed(a.s) === isRed(b.s) || a.r !== b.r + 1) return false;
+      }
+      return true;
+    }
+    function cap(s, toCol) {
+      var e = 0, ec = 0;
+      s.cells.forEach(function (c) { if (!c) e++; });
+      s.cols.forEach(function (col, p) { if (!col.length && p !== toCol) ec++; });
+      return (e + 1) * Math.pow(2, ec);
+    }
+    function grab(s, uid) {
+      var loc = find(s, uid);
+      if (!loc || loc.t === 'f') return null;
+      if (loc.t === 'e') return { cards: [s.cells[loc.p]], from: { t: 'e', p: loc.p } };
+      if (!runOK(s.cols[loc.p], loc.i)) return null;
+      return { cards: s.cols[loc.p].slice(loc.i), from: { t: 'c', p: loc.p, i: loc.i } };
+    }
+    function targets(s, grp) {
+      var out = [], first = grp.cards[0], n = grp.cards.length, i;
+      if (n === 1) {
+        if (canF(first, s)) out.push({ x: xCol(4 + first.s), y: 0, w: cw, h: ch, dst: { t: 'f', p: first.s }, pr: 100 });
+        for (i = 0; i < 4; i++) {
+          if (s.cells[i] || (grp.from.t === 'e' && grp.from.p === i)) continue;
+          out.push({ x: xCol(i), y: 0, w: cw, h: ch, dst: { t: 'e', p: i }, pr: 20 });
+        }
+      }
+      s.cols.forEach(function (col, p) {
+        if (grp.from.t === 'c' && grp.from.p === p) return;
+        if (!canPlace(first, col) || n > cap(s, p)) return;
+        if (!col.length && grp.from.t === 'c' && grp.from.i === 0) return;
+        out.push({ x: xCol(p), y: tabTop, w: cw, h: Math.max(ch, colBottom[p] - tabTop), dst: { t: 'c', p: p }, pr: col.length ? 60 : 30 });
+      });
+      return out;
+    }
+    function move(s, from, dst) {
+      var cards;
+      if (from.t === 'e') { cards = [s.cells[from.p]]; s.cells[from.p] = null; }
+      else cards = s.cols[from.p].splice(from.i);
+      if (dst.t === 'f') { s.found[dst.p].push(cards[0]); s.score += 10; }
+      else if (dst.t === 'e') s.cells[dst.p] = cards[0];
+      else for (var i = 0; i < cards.length; i++) s.cols[dst.p].push(cards[i]);
+    }
+    function sources(s) {
+      var out = [], i, p;
+      for (i = 0; i < 4; i++) if (s.cells[i]) out.push({ cards: [s.cells[i]], from: { t: 'e', p: i } });
+      for (p = 0; p < 8; p++) {
+        var col = s.cols[p], k;
+        for (k = col.length - 1; k >= 0; k--) {
+          if (k < col.length - 1 && !runOK(col, k)) break;
+          out.push({ cards: col.slice(k), from: { t: 'c', p: p, i: k } });
+        }
+      }
+      return out;
+    }
+    function simulateFinish(s) {
+      var f = s.found.map(function (x) { return x.length; });
+      var cols = s.cols.map(function (c) { return c.slice(); });
+      var cells = s.cells.slice(), moved = true, i, p;
+      while (moved) {
+        moved = false;
+        for (i = 0; i < 4; i++) {
+          var c = cells[i];
+          if (c && f[c.s] === c.r - 1) { f[c.s]++; cells[i] = null; moved = true; }
+        }
+        for (p = 0; p < 8; p++) {
+          var col = cols[p], t = col[col.length - 1];
+          if (t && f[t.s] === t.r - 1) { f[t.s]++; col.pop(); moved = true; }
+        }
+      }
+      return f[0] + f[1] + f[2] + f[3] === 52;
+    }
+    return {
+      id: 'freecell', name: 'FreeCell', solver: false,
+      init: function () {
+        var d = deckInts(), cols = [[], [], [], [], [], [], [], []];
+        d.forEach(function (c, i) { var x = mk(c); x.up = true; cols[i % 8].push(x); });
+        return { cols: cols, cells: [null, null, null, null], found: [[], [], [], []], score: 0, moves: 0 };
+      },
+      cards: function (s) {
+        var all = [];
+        s.cols.forEach(function (p) { all = all.concat(p); });
+        return all;
+      },
+      layout: function (Wd) {
+        W = Wd;
+        gap = Math.max(3, Math.round(W * 0.01));
+        cw = (W - 7 * gap) / 8; ch = cw * 1.42;
+        tabTop = ch + 16;
+      },
+      view: function (s) {
+        var items = [], slots = [], i, p;
+        for (i = 0; i < 4; i++) slots.push({ k: 'e' + i, x: xCol(i), y: 0 });
+        for (i = 0; i < 4; i++) slots.push({ k: 'f' + i, x: xCol(4 + i), y: 0, t: SUITS[i] });
+        for (p = 0; p < 8; p++) slots.push({ k: 'c' + p, x: xCol(p), y: tabTop });
+        s.cells.forEach(function (c, k) { if (c) items.push({ c: c, x: xCol(k), y: 0, z: 5 }); });
+        s.found.forEach(function (pile, k) { pilesItems(pile, xCol(4 + k), 0, items, 1, true); });
+        var mb = cascadeCols(s.cols, xCol, tabTop, items, colBottom, { d: 0.13, u: 0.27, min: 0.2 });
+        return { items: items, slots: slots, h: mb + 6 };
+      },
+      grab: grab,
+      targets: targets,
+      move: move,
+      tap: function (s, uid) {
+        var grp = grab(s, uid);
+        if (!grp) return false;
+        var ts = targets(s, grp).sort(function (a, b) { return b.pr - a.pr; });
+        if (!ts.length) return false;
+        move(s, grp.from, ts[0].dst);
+        return true;
+      },
+      slotTap: function () { return false; },
+      won: function (s) { return s.found[0].length + s.found[1].length + s.found[2].length + s.found[3].length === 52; },
+      stuck: function (s) {
+        var src = sources(s);
+        for (var i = 0; i < src.length; i++) if (targets(s, src[i]).length) return false;
+        return true;
+      },
+      hint: function (s) {
+        var src = sources(s), best = null, bp = -1;
+        src.forEach(function (g) {
+          targets(s, g).forEach(function (t) {
+            var pr = t.pr;
+            if (g.from.t === 'e') pr += 5;
+            if (g.from.t === 'c' && t.dst.t === 'e') pr -= 10;
+            if (pr > bp) { bp = pr; best = { g: g, t: t }; }
+          });
+        });
+        if (!best) return null;
+        var d = best.t.dst, to;
+        if (d.t === 'f') { var f = s.found[d.p]; to = f.length ? { card: f[f.length - 1] } : { slot: 'f' + d.p }; }
+        else if (d.t === 'e') to = { slot: 'e' + d.p };
+        else { var col = s.cols[d.p]; to = col.length ? { card: col[col.length - 1] } : { slot: 'c' + d.p }; }
+        return { from: best.g.cards, to: to };
+      },
+      autoSafe: function (s) {
+        function safe(card) {
+          if (!canF(card, s)) return false;
+          if (card.r <= 2) return true;
+          var o = isRed(card.s) ? [0, 3] : [1, 2];
+          return s.found[o[0]].length >= card.r - 1 && s.found[o[1]].length >= card.r - 1;
+        }
+        var i, p;
+        for (i = 0; i < 4; i++) { var c = s.cells[i]; if (c && safe(c)) { move(s, { t: 'e', p: i }, { t: 'f', p: c.s }); return true; } }
+        for (p = 0; p < 8; p++) {
+          var col = s.cols[p], t = col[col.length - 1];
+          if (t && safe(t)) { move(s, { t: 'c', p: p, i: col.length - 1 }, { t: 'f', p: t.s }); return true; }
+        }
+        return false;
+      },
+      autoReady: function (s) { return simulateFinish(s); },
+      autoStep: function (s) {
+        var i, p;
+        for (i = 0; i < 4; i++) {
+          var c = s.cells[i];
+          if (c && canF(c, s)) { move(s, { t: 'e', p: i }, { t: 'f', p: c.s }); return true; }
+        }
+        for (p = 0; p < 8; p++) {
+          var col = s.cols[p], t = col[col.length - 1];
+          if (t && canF(t, s)) { move(s, { t: 'c', p: p, i: col.length - 1 }, { t: 'f', p: t.s }); return true; }
+        }
+        return false;
+      },
+      info: function (s) { return s.moves + (s.moves === 1 ? ' jogada' : ' jogadas'); }
+    };
+  })();
+
+  /* =====================================================================
+     SPIDER (1 naipe, 8 conjuntos)
+     ===================================================================== */
+  var P = (function () {
+    var tabTop = 0, colBottom = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    function find(s, uid) {
+      var i, p;
+      for (i = 0; i < s.stock.length; i++) if (s.stock[i].id === uid) return { t: 's', i: i };
+      for (p = 0; p < 10; p++) for (i = 0; i < s.cols[p].length; i++) if (s.cols[p][i].id === uid) return { t: 'c', p: p, i: i };
+      return null;
+    }
+    function runOK(col, i) {
+      if (!col[i].up) return false;
+      for (var k = i; k < col.length - 1; k++) {
+        var a = col[k], b = col[k + 1];
+        if (!b.up || a.s !== b.s || a.r !== b.r + 1) return false;
+      }
+      return true;
+    }
+    function sweep(s, p) {
+      var col = s.cols[p], n = col.length, k;
+      if (n >= 13) {
+        var ok = true, last = col[n - 1];
+        for (k = 0; k < 13; k++) {
+          var c = col[n - 13 + k];
+          if (!c.up || c.r !== 13 - k || c.s !== last.s) { ok = false; break; }
+        }
+        if (ok) { col.splice(n - 13).forEach(function (c) { s.fnd.push(c); }); s.score += 100; }
+      }
+      if (col.length && !col[col.length - 1].up) { col[col.length - 1].up = true; s.score += 5; }
+    }
+    function grab(s, uid) {
+      var loc = find(s, uid);
+      if (!loc || loc.t !== 'c') return null;
+      if (!runOK(s.cols[loc.p], loc.i)) return null;
+      return { cards: s.cols[loc.p].slice(loc.i), from: { t: 'c', p: loc.p, i: loc.i } };
+    }
+    function canDrop(first, col) { return !col.length || col[col.length - 1].r === first.r + 1; }
+    function move(s, from, dst) {
+      var cards = s.cols[from.p].splice(from.i);
+      for (var i = 0; i < cards.length; i++) s.cols[dst.p].push(cards[i]);
+      sweep(s, from.p); sweep(s, dst.p);
+    }
+    function dealStock(s) {
+      if (s.stock.length < 10) { toast('O monte acabou.'); return false; }
+      if (s.cols.some(function (c) { return !c.length; })) { toast('Preencha as colunas vazias antes de distribuir.'); return false; }
+      for (var p = 0; p < 10; p++) { var c = s.stock.pop(); c.up = true; s.cols[p].push(c); }
+      for (p = 0; p < 10; p++) sweep(s, p);
+      return true;
+    }
+    function allMoves(s) {
+      var out = [];
+      s.cols.forEach(function (col, p) {
+        for (var i = col.length - 1; i >= 0; i--) {
+          if (!col[i].up) break;
+          if (i < col.length - 1 && !runOK(col, i)) break;
+          s.cols.forEach(function (tc, q) {
+            if (q === p || !canDrop(col[i], tc)) return;
+            if (!tc.length && i === 0) return;
+            var reveals = i > 0 && !col[i - 1].up;
+            out.push({ from: { t: 'c', p: p, i: i }, dst: { t: 'c', p: q }, pr: (tc.length ? 50 : 20) + (reveals ? 30 : 0) + (i > 0 && col[i - 1].r === col[i].r + 1 && col[i - 1].up ? -40 : 0) });
+          });
+        }
+      });
+      return out;
+    }
+    return {
+      id: 'spider', name: 'Spider', solver: false,
+      init: function () {
+        var cards = [], uid = 0, k, r, p, j;
+        for (k = 0; k < 8; k++) for (r = 1; r <= 13; r++) cards.push({ id: uid++, s: 0, r: r, up: false });
+        shuffle(cards);
+        var cols = [];
+        for (p = 0; p < 10; p++) {
+          cols.push([]);
+          var n = p < 4 ? 6 : 5;
+          for (j = 0; j < n; j++) cols[p].push(cards.pop());
+          cols[p][n - 1].up = true;
+        }
+        return { cols: cols, stock: cards, fnd: [], score: 0, moves: 0 };
+      },
+      cards: function (s) {
+        var all = s.stock.slice();
+        s.cols.forEach(function (p) { all = all.concat(p); });
+        return all;
+      },
+      layout: function (Wd) {
+        W = Wd; gap = 3;
+        cw = (W - 9 * gap) / 10; ch = cw * 1.42;
+        tabTop = ch + 14;
+      },
+      view: function (s) {
+        var items = [], slots = [], p;
+        slots.push({ k: 'done', x: xCol(0), y: 0, t: (s.fnd.length / 13) + '/8' });
+        slots.push({ k: 'stock', x: xCol(9), y: 0, click: true, cls: s.stock.length ? '' : 'dead' });
+        for (p = 0; p < 10; p++) slots.push({ k: 'c' + p, x: xCol(p), y: tabTop });
+        pilesItems(s.stock, xCol(9), 0, items, 1, true);
+        pilesItems(s.fnd, xCol(0), 0, items, 1, true);
+        var mb = cascadeCols(s.cols, xCol, tabTop, items, colBottom, { d: 0.11, u: 0.3, min: 0.17 });
+        return { items: items, slots: slots, h: mb + 6 };
+      },
+      grab: grab,
+      targets: function (s, grp) {
+        var out = [], first = grp.cards[0];
+        s.cols.forEach(function (col, p) {
+          if (p === grp.from.p || !canDrop(first, col)) return;
+          out.push({ x: xCol(p), y: tabTop, w: cw, h: Math.max(ch, colBottom[p] - tabTop), dst: { t: 'c', p: p } });
+        });
+        return out;
+      },
+      move: move,
+      tap: function (s, uid) {
+        var loc = find(s, uid);
+        if (!loc) return false;
+        if (loc.t === 's') return dealStock(s);
+        var grp = grab(s, uid);
+        if (!grp) return false;
+        var first = grp.cards[0], best = -1, q;
+        for (q = 0; q < 10; q++) {
+          if (q === grp.from.p) continue;
+          var tc = s.cols[q];
+          if (tc.length && tc[tc.length - 1].r === first.r + 1) { best = q; break; }
+        }
+        if (best < 0 && grp.from.i > 0) {
+          for (q = 0; q < 10; q++) if (q !== grp.from.p && !s.cols[q].length) { best = q; break; }
+        }
+        if (best < 0) return false;
+        move(s, grp.from, { t: 'c', p: best });
+        return true;
+      },
+      slotTap: function (s, k) { return k === 'stock' ? dealStock(s) : false; },
+      won: function (s) { return s.fnd.length === 104; },
+      stuck: function (s) { return s.stock.length < 10 && allMoves(s).length === 0; },
+      hint: function (s) {
+        var ms = allMoves(s).sort(function (a, b) { return b.pr - a.pr; });
+        if (ms.length && ms[0].pr > 0) {
+          var m = ms[0], col = s.cols[m.dst.p];
+          return { from: s.cols[m.from.p].slice(m.from.i), to: col.length ? { card: col[col.length - 1] } : { slot: 'c' + m.dst.p } };
+        }
+        if (s.stock.length >= 10) {
+          var top = s.stock[s.stock.length - 1];
+          return { from: [top], to: { slot: 'stock' }, msg: 'Sem boas jogadas. Distribua uma nova linha.' };
+        }
+        if (ms.length) {
+          var m2 = ms[0], c2 = s.cols[m2.dst.p];
+          return { from: s.cols[m2.from.p].slice(m2.from.i), to: c2.length ? { card: c2[c2.length - 1] } : { slot: 'c' + m2.dst.p } };
+        }
+        return null;
+      },
+      autoReady: function () { return false },
+      autoStep: function () { return false; },
+      info: function (s) { return (s.fnd.length / 13) + '/8 conjuntos · ' + Math.floor(s.stock.length / 10) + ' distribuições'; }
+    };
+  })();
+
+  /* =====================================================================
+     PYRAMID
+     ===================================================================== */
+  var PY = (function () {
+    var PL = [], PR = [], ROW = [], COL = [], y0 = 0, ry = 0;
+    (function () {
+      var r, k, i = 0;
+      for (r = 0; r < 7; r++) for (k = 0; k <= r; k++) {
+        ROW[i] = r; COL[i] = k;
+        if (r < 6) { PL[i] = (r + 1) * (r + 2) / 2 + k; PR[i] = PL[i] + 1; } else { PL[i] = -1; PR[i] = -1; }
+        i++;
+      }
+    })();
+    function free(s, i) { return !!s.pyr[i] && (PL[i] < 0 || (!s.pyr[PL[i]] && !s.pyr[PR[i]])); }
+    function find(s, uid) {
+      var i;
+      for (i = 0; i < 28; i++) if (s.pyr[i] && s.pyr[i].id === uid) return { t: 'p', i: i };
+      for (i = 0; i < s.waste.length; i++) if (s.waste[i].id === uid) return { t: 'w', i: i };
+      for (i = 0; i < s.stock.length; i++) if (s.stock[i].id === uid) return { t: 's', i: i };
+      return null;
+    }
+    function selCard(s) {
+      if (!s.sel) return null;
+      return s.sel.t === 'w' ? s.waste[s.waste.length - 1] : s.pyr[s.sel.i];
+    }
+    function removeAt(s, loc) { if (loc.t === 'w') s.waste.pop(); else s.pyr[loc.i] = null; }
+    function draw(s) {
+      s.sel = null;
+      if (s.stock.length) { var c = s.stock.pop(); c.up = true; s.waste.push(c); return true; }
+      if (s.waste.length && s.pass < 3) {
+        while (s.waste.length) { var w = s.waste.pop(); w.up = false; s.stock.push(w); }
+        s.pass++;
+        return true;
+      }
+      toast(s.waste.length ? 'Você já usou as 3 passadas.' : 'O monte acabou.');
+      return false;
+    }
+    function pairs(s) {
+      var fr = [], out = [], i, j;
+      for (i = 0; i < 28; i++) if (free(s, i)) fr.push(i);
+      var w = s.waste[s.waste.length - 1];
+      for (i = 0; i < fr.length; i++) {
+        var a = s.pyr[fr[i]];
+        if (a.r === 13) out.push({ a: a });
+        for (j = i + 1; j < fr.length; j++) { var b = s.pyr[fr[j]]; if (a.r + b.r === 13) out.push({ a: a, b: b }); }
+        if (w && a.r + w.r === 13) out.push({ a: a, b: w });
+      }
+      if (w && w.r === 13) out.push({ a: w });
+      return out;
+    }
+    return {
+      id: 'pyramid', name: 'Pyramid', solver: true,
+      init: function (d) {
+        if (!d) { var ints = deckInts(); d = { pyr: ints.slice(0, 28), stock: ints.slice(28) }; }
+        var pyr = d.pyr.map(function (c) { var x = mk(c); x.up = true; return x; });
+        return { pyr: pyr, stock: d.stock.map(mk), waste: [], sel: null, pass: 1, score: 0, moves: 0 };
+      },
+      cards: function (s) { return s.pyr.filter(Boolean).concat(s.stock, s.waste); },
+      layout: function (Wd) {
+        W = Wd; gap = 4;
+        cw = (W - 6 * gap) / 7; ch = cw * 1.42;
+        ry = ch * 0.5;
+        y0 = 6 * ry + ch + 22;
+      },
+      view: function (s) {
+        var items = [], slots = [], i;
+        var xs = W / 2 - cw - 6, xw = W / 2 + 6;
+        slots.push({ k: 'stock', x: xs, y: y0, click: true, t: (!s.stock.length && s.waste.length && s.pass < 3) ? '↻' : '', cls: (!s.stock.length && (!s.waste.length || s.pass >= 3)) ? 'dead' : '' });
+        slots.push({ k: 'waste', x: xw, y: y0 });
+        for (i = 0; i < 28; i++) {
+          var c = s.pyr[i];
+          if (!c) continue;
+          var r = ROW[i], k = COL[i];
+          var sel = !!(s.sel && s.sel.t === 'p' && s.sel.i === i);
+          items.push({ c: c, x: (W - (r + 1) * cw - r * gap) / 2 + k * (cw + gap), y: r * ry, z: r + 1, dim: !free(s, i), sel: sel });
+        }
+        pilesItems(s.stock, xs, y0, items, 1, true);
+        s.waste.forEach(function (c, j) {
+          items.push({ c: c, x: xw, y: y0, z: 100 + j, flat: j < s.waste.length - 1, sel: !!(s.sel && s.sel.t === 'w' && j === s.waste.length - 1) });
+        });
+        return { items: items, slots: slots, h: y0 + ch + 8 };
+      },
+      grab: function () { return null; },
+      targets: function () { return []; },
+      move: function () {},
+      tap: function (s, uid) {
+        var loc = find(s, uid);
+        if (!loc) return false;
+        if (loc.t === 's') return draw(s);
+        var card;
+        if (loc.t === 'w') { if (loc.i !== s.waste.length - 1) return false; card = s.waste[loc.i]; }
+        else { if (!free(s, loc.i)) return false; card = s.pyr[loc.i]; }
+        var asSel = loc.t === 'w' ? { t: 'w' } : { t: 'p', i: loc.i };
+        if (card.r === 13) { removeAt(s, loc); s.sel = null; s.score += 10; return true; }
+        if (!s.sel) { s.sel = asSel; return 'soft'; }
+        if (s.sel.t === asSel.t && s.sel.i === asSel.i) { s.sel = null; return 'soft'; }
+        var other = selCard(s);
+        if (other && other.r + card.r === 13) {
+          var selLoc = s.sel;
+          removeAt(s, selLoc); removeAt(s, loc.t === 'w' ? { t: 'w' } : loc);
+          s.sel = null; s.score += 20;
+          return true;
+        }
+        s.sel = asSel;
+        return 'soft';
+      },
+      slotTap: function (s, k) { return k === 'stock' ? draw(s) : false; },
+      won: function (s) { return s.pyr.every(function (c) { return !c; }); },
+      stuck: function (s) { return pairs(s).length === 0 && !s.stock.length && (!s.waste.length || s.pass >= 3); },
+      hint: function (s) {
+        var ps = pairs(s);
+        if (ps.length) {
+          var m = ps[0];
+          return { from: m.b ? [m.a] : [m.a], to: m.b ? { card: m.b } : null };
+        }
+        if (s.stock.length || (s.waste.length && s.pass < 3)) {
+          var top = s.stock[s.stock.length - 1];
+          return { from: top ? [top] : [], to: { slot: 'stock' }, msg: 'Sem pares agora. Vire uma carta do monte.' };
+        }
+        return null;
+      },
+      autoReady: function () { return false; },
+      autoStep: function () { return false; },
+      info: function (s) {
+        var left = s.pyr.filter(Boolean).length;
+        return left + ' cartas na pirâmide · passada ' + s.pass + ' de 3';
+      }
+    };
+  })();
+
+  /* =====================================================================
+     TRIPEAKS
+     ===================================================================== */
+  var T = (function () {
+    var TL = [], TRr = [], TX = [], TY = [], step = 0, ry = 0, y0 = 0, i;
+    for (i = 0; i < 28; i++) { TL[i] = -1; TRr[i] = -1; }
+    for (i = 0; i < 3; i++) { TL[i] = 3 + 2 * i; TRr[i] = TL[i] + 1; TX[i] = 1.5 + 3 * i; TY[i] = 0; }
+    for (i = 0; i < 6; i++) { TL[3 + i] = 9 + (i >> 1) * 3 + (i & 1); TRr[3 + i] = TL[3 + i] + 1; TX[3 + i] = [1, 2, 4, 5, 7, 8][i]; TY[3 + i] = 1; }
+    for (i = 0; i < 9; i++) { TL[9 + i] = 18 + i; TRr[9 + i] = 19 + i; TX[9 + i] = i + 0.5; TY[9 + i] = 2; }
+    for (i = 0; i < 10; i++) { TX[18 + i] = i; TY[18 + i] = 3; }
+    function free(s, i) { return !!s.pk[i] && (TL[i] < 0 || (!s.pk[TL[i]] && !s.pk[TRr[i]])); }
+    function refresh(s) { for (var i = 0; i < 28; i++) if (s.pk[i]) s.pk[i].up = free(s, i); }
+    function adj(a, b) { var d = Math.abs(a.r - b.r); return d === 1 || d === 12; }
+    function find(s, uid) {
+      var i;
+      for (i = 0; i < 28; i++) if (s.pk[i] && s.pk[i].id === uid) return { t: 'p', i: i };
+      for (i = 0; i < s.stock.length; i++) if (s.stock[i].id === uid) return { t: 's', i: i };
+      return null;
+    }
+    function draw(s) {
+      if (!s.stock.length) { toast('O monte acabou.'); return false; }
+      var c = s.stock.pop(); c.up = true; s.waste.push(c); s.streak = 0;
+      return true;
+    }
+    function playable(s) {
+      var out = [], w = s.waste[s.waste.length - 1], k;
+      if (!w) return out;
+      for (k = 0; k < 28; k++) if (free(s, k) && adj(s.pk[k], w)) out.push(s.pk[k]);
+      return out;
+    }
+    return {
+      id: 'tripeaks', name: 'TriPeaks', solver: true,
+      init: function (d) {
+        if (!d) { var ints = deckInts(); d = { pk: ints.slice(0, 28), first: ints[28], stock: ints.slice(29) }; }
+        var f = mk(d.first); f.up = true;
+        var s = { pk: d.pk.map(mk), stock: d.stock.map(mk), waste: [f], streak: 0, score: 0, moves: 0 };
+        refresh(s);
+        return s;
+      },
+      cards: function (s) { return s.pk.filter(Boolean).concat(s.stock, s.waste); },
+      layout: function (Wd) {
+        W = Wd; gap = 0;
+        cw = W / (9 * 0.86 + 1); ch = cw * 1.42;
+        step = cw * 0.86; ry = ch * 0.5;
+        y0 = 3 * ry + ch + 24;
+      },
+      view: function (s) {
+        refresh(s);
+        var items = [], slots = [], i;
+        var xs = W / 2 - cw - 8, xw = W / 2 + 8;
+        slots.push({ k: 'stock', x: xs, y: y0, click: true, cls: s.stock.length ? '' : 'dead' });
+        slots.push({ k: 'waste', x: xw, y: y0 });
+        for (i = 0; i < 28; i++) {
+          if (!s.pk[i]) continue;
+          items.push({ c: s.pk[i], x: TX[i] * step, y: TY[i] * ry, z: TY[i] + 1 });
+        }
+        pilesItems(s.stock, xs, y0, items, 1, true);
+        s.waste.forEach(function (c, j) { items.push({ c: c, x: xw, y: y0, z: 100 + j, flat: j < s.waste.length - 1 }); });
+        return { items: items, slots: slots, h: y0 + ch + 8 };
+      },
+      grab: function () { return null; },
+      targets: function () { return []; },
+      move: function () {},
+      tap: function (s, uid) {
+        var loc = find(s, uid);
+        if (!loc) return false;
+        if (loc.t === 's') return draw(s);
+        var w = s.waste[s.waste.length - 1];
+        if (!free(s, loc.i) || !w || !adj(s.pk[loc.i], w)) return false;
+        var c = s.pk[loc.i];
+        s.pk[loc.i] = null; s.waste.push(c); c.up = true;
+        s.streak++; s.score += 10 * s.streak; s.best = Math.max(s.best || 0, s.streak);
+        refresh(s);
+        return true;
+      },
+      slotTap: function (s, k) { return k === 'stock' ? draw(s) : false; },
+      won: function (s) { return s.pk.every(function (c) { return !c; }); },
+      stuck: function (s) { return !s.stock.length && playable(s).length === 0; },
+      hint: function (s) {
+        var pl = playable(s);
+        if (pl.length) return { from: [pl[0]], to: { card: s.waste[s.waste.length - 1] } };
+        if (s.stock.length) return { from: [s.stock[s.stock.length - 1]], to: { slot: 'stock' }, msg: 'Sem jogadas. Vire uma carta do monte.' };
+        return null;
+      },
+      autoReady: function () { return false; },
+      autoStep: function () { return false; },
+      info: function (s) { return 'Sequência ' + s.streak + ' · ' + s.stock.length + ' no monte · ' + s.pk.filter(Boolean).length + ' cartas'; }
+    };
+  })();
+
+  /* ---------- game registry / menu content ---------- */
+  var ART = {
+    klondike: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="4" y="28" width="8" height="14" rx="2"/><rect x="15" y="22" width="8" height="20" rx="2"/><rect x="26" y="16" width="8" height="26" rx="2"/><rect x="37" y="8" width="8" height="34" rx="2"/></svg>',
+    spider: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="4" y="6" width="11" height="14" rx="2"/><rect x="4" y="14" width="11" height="14" rx="2"/><rect x="4" y="22" width="11" height="14" rx="2"/><rect x="18.500" y="6" width="11" height="14" rx="2"/><rect x="18.500" y="14" width="11" height="14" rx="2"/><rect x="33" y="6" width="11" height="14" rx="2"/><rect x="33" y="14" width="11" height="14" rx="2"/><rect x="33" y="22" width="11" height="14" rx="2"/><rect x="33" y="30" width="11" height="14" rx="2"/></svg>',
+    freecell: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="3" y="5" width="8" height="11" rx="2"/><rect x="14" y="5" width="8" height="11" rx="2"/><rect x="25" y="5" width="8" height="11" rx="2" stroke-dasharray="3 3"/><rect x="36" y="5" width="8" height="11" rx="2" stroke-dasharray="3 3"/><rect x="3" y="22" width="8" height="20" rx="2"/><rect x="14" y="22" width="8" height="20" rx="2"/><rect x="25" y="22" width="8" height="20" rx="2"/><rect x="36" y="22" width="8" height="20" rx="2"/></svg>',
+    pyramid: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="19" y="4" width="10" height="12" rx="2"/><rect x="13" y="17" width="10" height="12" rx="2"/><rect x="25" y="17" width="10" height="12" rx="2"/><rect x="7" y="30" width="10" height="12" rx="2"/><rect x="19" y="30" width="10" height="12" rx="2"/><rect x="31" y="30" width="10" height="12" rx="2"/></svg>',
+    tripeaks: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="6" y="5" width="7" height="9" rx="1.500"/><rect x="20.500" y="5" width="7" height="9" rx="1.500"/><rect x="35" y="5" width="7" height="9" rx="1.500"/><rect x="3" y="17" width="7" height="9" rx="1.500"/><rect x="10.500" y="17" width="7" height="9" rx="1.500"/><rect x="17.500" y="17" width="7" height="9" rx="1.500"/><rect x="25" y="17" width="7" height="9" rx="1.500"/><rect x="32" y="17" width="7" height="9" rx="1.500"/><rect x="39.500" y="17" width="7" height="9" rx="1.500"/><rect x="2" y="30" width="6" height="9" rx="1.500"/><rect x="9" y="30" width="6" height="9" rx="1.500"/><rect x="16" y="30" width="6" height="9" rx="1.500"/><rect x="23" y="30" width="6" height="9" rx="1.500"/><rect x="30" y="30" width="6" height="9" rx="1.500"/><rect x="37" y="30" width="6" height="9" rx="1.500"/></svg>'
+  };
+  var META = {
+    klondike: { color: 'var(--mint)', sub: 'Clássico · compra 1', help: ['Leve todas as cartas às quatro pilhas de cima, de A a K, por naipe.', 'Nas colunas, monte em ordem decrescente alternando vermelho e preto.', 'Espaço vazio só aceita o Rei.', 'Toque no monte para comprar. A recompra é ilimitada.'] },
+    spider: { color: 'var(--violet)', sub: '1 naipe · 8 conjuntos', help: ['Forme 8 sequências de K até A, todas de espadas. Cada sequência pronta sai da mesa.', 'Mova uma carta ou sequência sobre uma carta de valor imediatamente maior.', 'Toque no monte para distribuir uma carta em cada coluna. Não pode haver coluna vazia.'] },
+    freecell: { color: 'var(--cyan)', sub: '4 casas livres', help: ['Leve todas as cartas às quatro pilhas de cima, de A a K.', 'Nas colunas, monte em ordem decrescente alternando vermelho e preto.', 'As 4 casas livres guardam uma carta cada.', 'Dá para mover várias cartas juntas se houver casas livres ou colunas vazias.'] },
+    pyramid: { color: 'var(--amber)', sub: 'Pares que somam 13', help: ['Remova pares de cartas livres que somam 13. A vale 1, J vale 11 e Q vale 12. O Rei sai sozinho.', 'Uma carta só está livre quando nenhuma outra a cobre.', 'Toque numa carta e depois na outra para formar o par. A carta de cima do descarte também vale.', 'Toque no monte para virar cartas. São 3 passadas pelo monte.'] },
+    tripeaks: { color: 'var(--coral)', sub: 'Uma carta acima ou abaixo', help: ['Limpe as três montanhas.', 'Toque numa carta livre que seja um valor acima ou abaixo da carta do descarte. A e K são vizinhos.', 'Cartas viradas aparecem quando as de cima saem.', 'Sem jogada, toque no monte. Jogadas seguidas valem mais pontos.'] }
+  };
+  var ORDER = ['klondike', 'spider', 'freecell', 'pyramid', 'tripeaks'];
+  var GAMES = { klondike: K, spider: P, freecell: F, pyramid: PY, tripeaks: T };
+  if (!GAMES[lastGame]) lastGame = 'klondike';
+
+  /* ---------- deal source: worker ---------- */
+  var worker = null, ready = { klondike: [], pyramid: [], tripeaks: [] }, waiters = {}, queue = [], wBusy = false, curJob = null;
+  function pump() {
+    if (!worker || wBusy || !queue.length) return;
+    curJob = queue.shift(); wBusy = true;
+    worker.postMessage({ game: curJob });
+  }
+  function enqueue(g, front) {
+    if (!ready[g] || ready[g].length >= 1) return;
+    if (wBusy && curJob === g) return;
+    var at = queue.indexOf(g);
+    if (at >= 0) { if (front && at > 0) { queue.splice(at, 1); queue.unshift(g); } return; }
+    if (front) queue.unshift(g); else queue.push(g);
+    pump();
+  }
+  function initWorker() {
+    try {
+      var src = '(' + solverFactory.toString() + ')()';
+      var url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
+      worker = new Worker(url);
+      worker.onmessage = function (e) {
+        var d = e.data;
+        wBusy = false; curJob = null;
+        ready[d.game].push(d.deal);
+        var cb = waiters[d.game];
+        if (cb) { waiters[d.game] = null; cb(ready[d.game].shift()); enqueue(d.game); }
+        pump();
+      };
+      worker.onerror = function () {
+        worker = null; wBusy = false;
+        Object.keys(waiters).forEach(function (g) { var cb = waiters[g]; waiters[g] = null; if (cb) cb(null); });
+      };
+      if (ready[lastGame]) enqueue(lastGame);
+      ['klondike', 'pyramid', 'tripeaks'].forEach(function (g) { enqueue(g); });
+    } catch (e) { worker = null; }
+  }
+  function getDeal(g, cb) {
+    if (!ready[g]) { cb(null); return; }
+    if (ready[g].length) { cb(ready[g].shift()); enqueue(g); return; }
+    if (!worker) { cb(null); return; }
+    waiters[g] = cb;
+    enqueue(g, true);
+  }
+
+  /* =====================================================================
+     SETTINGS, SOUND, PROGRESS, SAVES
+     ===================================================================== */
+  var CFGKEY = 'paciencia-ajustes-v1', PRGKEY = 'paciencia-progresso-v1', SAVEKEY = 'paciencia-saves-v1';
+  var APP_VERSION = '1.4.0', APP_DATE = '02/11/2026';
+  var cfg = { sound: true, vibrate: true, auto: true, left: false, speed: 'normal', theme: 'aurora', suits4: false };
+  var SPEEDS = { lenta: '0.34s', normal: '0.2s', rapida: '0.1s', off: '0s' };
+  try { var c0 = JSON.parse(localStorage.getItem(CFGKEY)); if (c0) Object.keys(cfg).forEach(function (k) { if (c0[k] !== undefined) cfg[k] = c0[k]; }); } catch (e) {}
+  if (!SPEEDS[cfg.speed]) cfg.speed = 'normal';
+  cfg.auto = false; // jogo automático removido: as cartas só se movem por ação do jogador
+  function saveCfg() { try { localStorage.setItem(CFGKEY, JSON.stringify(cfg)); } catch (e) {} }
+  function applyCfg() { document.documentElement.style.setProperty('--dur', SPEEDS[cfg.speed]); }
+  applyCfg();
+
+  // ---------- sound and vibration ----------
+  var actx = null;
+  function audio() {
+    if (actx) return actx;
+    try { var AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); } catch (e) { actx = null; }
+    return actx;
+  }
+  function tone(freq, dur, type, vol, delay) {
+    var a = audio();
+    if (!a) return;
+    try {
+      if (a.state === 'suspended') a.resume();
+      var t0 = a.currentTime + (delay || 0), o = a.createOscillator(), g = a.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol || 0.06, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(a.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch (e) {}
+  }
+  function snd(k) {
+    if (!cfg.sound) return;
+    if (k === 'move') tone(480, 0.07, 'triangle', 0.05);
+    else if (k === 'good') { tone(620, 0.08, 'triangle', 0.06); tone(880, 0.12, 'triangle', 0.05, 0.06); }
+    else if (k === 'bad') tone(150, 0.14, 'square', 0.035);
+    else if (k === 'win') [523, 659, 784, 1046].forEach(function (f, i) { tone(f, 0.22, 'triangle', 0.07, i * 0.12); });
+    else if (k === 'ach') [784, 988, 1319].forEach(function (f, i) { tone(f, 0.16, 'sine', 0.06, i * 0.09); });
+  }
+  function buzz(p) { if (cfg.vibrate && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
+
+  // ---------- progress ----------
+  var PRG = { stats: {}, ach: {}, days: [] };
+  try { var p0 = JSON.parse(localStorage.getItem(PRGKEY)); if (p0 && p0.stats) PRG = p0; } catch (e) {}
+  PRG.ach = PRG.ach || {}; PRG.days = PRG.days || [];
+  function blank() { return { played: 0, wins: 0, streak: 0, bestStreak: 0, timeWins: 0, best: 0, bestTime: 0 }; }
+  ORDER.forEach(function (k) {
+    if (!PRG.stats[k]) {
+      var o = blank(), r = rec[k];
+      if (r && r.wins) { o.wins = r.wins; o.played = r.wins; o.best = r.best || 0; o.bestTime = r.bestTime || 0; o.timeWins = (r.bestTime || 0) * r.wins; }
+      PRG.stats[k] = o;
+    }
+  });
+  function savePrg() { try { localStorage.setItem(PRGKEY, JSON.stringify(PRG)); } catch (e) {} }
+  function totals() {
+    var t = { played: 0, wins: 0, streak: 0, best: 0 };
+    ORDER.forEach(function (k) { var s = PRG.stats[k]; t.played += s.played; t.wins += s.wins; t.best = Math.max(t.best, s.bestStreak); });
+    return t;
+  }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
+  var ACH = [
+    { id: 'welcome', name: 'Bem-vindo', desc: 'Abra o jogo pela primeira vez.', th: 'oceano' },
+    { id: 'first', name: 'Primeira vitória', desc: 'Vença qualquer jogo.', th: 'floresta', n: function () { return [Math.min(1, totals().wins), 1]; } },
+    { id: 'wins5', name: 'Pegando o jeito', desc: 'Some 5 vitórias.', th: 'cassino', n: function () { return [Math.min(5, totals().wins), 5]; } },
+    { id: 'wins25', name: 'Veterano', desc: 'Some 25 vitórias.', n: function () { return [Math.min(25, totals().wins), 25]; } },
+    { id: 'all5', name: 'Cinco em um', desc: 'Vença cada um dos 5 jogos ao menos uma vez.', th: 'papel', n: function () { return [ORDER.filter(function (k) { return PRG.stats[k].wins > 0; }).length, 5]; } },
+    { id: 'master10', name: 'Especialista', desc: 'Vença 10 vezes o mesmo jogo.', n: function () { return [Math.min(10, Math.max.apply(null, ORDER.map(function (k) { return PRG.stats[k].wins; }))), 10]; } },
+    { id: 'streak3', name: 'Em sequência', desc: 'Vença 3 partidas seguidas num jogo.', th: 'poente', n: function () { return [Math.min(3, totals().best), 3]; } },
+    { id: 'streak5', name: 'Imparável', desc: 'Vença 5 partidas seguidas num jogo.', n: function () { return [Math.min(5, totals().best), 5]; } },
+    { id: 'fast', name: 'Relâmpago', desc: 'Vença uma partida em menos de 3 minutos.' },
+    { id: 'clean', name: 'Sem ajuda', desc: 'Vença sem usar dica nem desfazer.' },
+    { id: 'peaks10', name: 'Cadeia perfeita', desc: 'Faça uma sequência de 10 cartas no TriPeaks.', th: 'neon' },
+    { id: 'score', name: 'Mil pontos', desc: 'Termine uma partida com 1000 pontos ou mais.' },
+    { id: 'played50', name: 'Persistente', desc: 'Comece 50 partidas.', n: function () { return [Math.min(50, totals().played), 50]; } },
+    { id: 'days5', name: 'Fiel', desc: 'Jogue em 5 dias diferentes.', n: function () { return [Math.min(5, PRG.days.length), 5]; } }
+  ];
+  var THEMES = [
+    { id: 'aurora', name: 'Aurora', base: '#0b0f13', acc: '#52d6a3', g: ['#0b0f13', '#1f8f74'], bk: '#2a8fa0' },
+    { id: 'oceano', name: 'Oceano', ach: 'welcome', base: '#050d17', acc: '#4fd8e6', g: ['#050d17', '#1f6fbe'], bk: '#1c7aa8' },
+    { id: 'floresta', name: 'Floresta', ach: 'first', base: '#080f0a', acc: '#9bd86e', g: ['#080f0a', '#3a8a46'], bk: '#2f7a40' },
+    { id: 'cassino', name: 'Noite de cassino', ach: 'wins5', base: '#06110b', acc: '#e8bb55', g: ['#06110b', '#17794a'], bk: '#7a1c30' },
+    { id: 'poente', name: 'Pôr do sol', ach: 'streak3', base: '#120a14', acc: '#ff8f6b', g: ['#2a0f2e', '#d0507a'], bk: '#a04a8a' },
+    { id: 'papel', name: 'Papel', ach: 'all5', base: '#ece4d4', acc: '#2c5fd6', g: ['#f7f1e4', '#e6d9bd'], bk: '#3c5cb4' },
+    { id: 'neon', name: 'Neon', ach: 'peaks10', base: '#05030b', acc: '#ff4fd8', g: ['#05030b', '#3a1670'], bk: '#2a1260' }
+  ];
+  function achById(id) { for (var i = 0; i < ACH.length; i++) if (ACH[i].id === id) return ACH[i]; return null; }
+  function themeById(id) { for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i]; return null; }
+  function themeOpen(t) { return !t.ach || !!PRG.ach[t.ach]; }
+  function applyTheme() {
+    var t = themeById(cfg.theme);
+    if (!t || !themeOpen(t)) { t = THEMES[0]; cfg.theme = 'aurora'; }
+    var h = document.documentElement;
+    h.setAttribute('data-theme', t.id);
+    h.setAttribute('data-suits', cfg.suits4 ? '4' : '2');
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', t.base);
+  }
+  if (!PRG.ach.welcome) { PRG.ach.welcome = Date.now(); savePrg(); }
+  applyTheme();
+  function evalAch(ctx) {
+    var got = [];
+    var tt = totals();
+    ACH.forEach(function (a) {
+      if (PRG.ach[a.id]) return;
+      var ok = false;
+      if (a.n) { var v = a.n(); ok = v[0] >= v[1]; }
+      else if (ctx && ctx.win) {
+        if (a.id === 'fast') ok = ctx.time < 180;
+        else if (a.id === 'clean') ok = ctx.clean;
+        else if (a.id === 'peaks10') ok = ctx.game === 'tripeaks' && ctx.peak >= 10;
+        else if (a.id === 'score') ok = ctx.total >= 1000;
+      }
+      if (ok) { PRG.ach[a.id] = Date.now(); got.push(a); }
+    });
+    if (got.length) {
+      savePrg();
+      snd('ach');
+      toast('Conquista: ' + got.map(function (a) { return a.name + (a.th ? ' · tema ' + themeById(a.th).name + ' liberado' : ''); }).join(', '));
+    }
+    return tt;
+  }
+
+  // ---------- saved games ----------
+  var SAVES = {};
+  try { SAVES = JSON.parse(localStorage.getItem(SAVEKEY)) || {}; } catch (e) { SAVES = {}; }
+  var counted = false, hints = 0, undos = 0, persistT = 0;
+  function writeSaves() { try { localStorage.setItem(SAVEKEY, JSON.stringify(SAVES)); } catch (e) {} }
+  function persist() {
+    clearTimeout(persistT); persistT = 0;
+    if (!S || !cur) return;
+    if (counted && !ended) {
+      SAVES[cur.id] = { s: JSON.stringify(S), init: initialJSON, hist: history.slice(-20), el: elapsed, h: hints, u: undos };
+      writeSaves();
+    }
+  }
+  function persistSoon() { if (!persistT) persistT = setTimeout(persist, 400); }
+  function dropSave(id) { if (SAVES[id]) { delete SAVES[id]; writeSaves(); } }
+  function markStarted() {
+    if (counted) return;
+    counted = true;
+    PRG.stats[cur.id].played++;
+    var d = today();
+    if (PRG.days.indexOf(d) < 0) PRG.days.push(d);
+    savePrg();
+    evalAch(null);
+  }
+  // abandoning a counted, unfinished game breaks its win streak
+  function abandon(id) {
+    if (SAVES[id]) { PRG.stats[id].streak = 0; savePrg(); dropSave(id); }
+  }
+
+  /* =====================================================================
+     ENGINE
+     ===================================================================== */
+  function mx(x, w) { return cfg.left ? W - w - x : x; }
+  function makeCard(c) {
+    var el = document.createElement('div');
+    el.className = 'card gone s' + c.s + (isRed(c.s) ? ' red' : '');
+    el.dataset.id = c.id;
+    el.innerHTML = '<div class="face"><div class="corner"><b>' + RANKS[c.r] + '</b><i>' + SUITS[c.s] +
+      '</i></div><div class="pip">' + SUITS[c.s] + '</div></div>';
+    return el;
+  }
+  function buildBoard() {
+    board.innerHTML = '';
+    els.clear(); pos.clear(); st.clear(); slotEls = {}; slotSt = {};
+    cur.cards(S).forEach(function (c) {
+      var el = makeCard(c);
+      els.set(c.id, el);
+      board.appendChild(el);
+      st.set(c.id, { x: NaN, y: NaN, z: -1, down: null, flat: null, dim: null, sel: null, gone: true });
+    });
+  }
+  function layout() {
+    cur.layout(board.clientWidth);
+    board.style.setProperty('--cw', cw + 'px');
+    board.style.setProperty('--ch', ch + 'px');
+    st.forEach(function (v) { v.x = NaN; });
+    Object.keys(slotSt).forEach(function (k) { slotSt[k].x = NaN; });
+  }
+  function render() {
+    var v = cur.view(S), seen = new Set();
+    v.slots.forEach(function (sl) {
+      var el = slotEls[sl.k], s = slotSt[sl.k], sx = mx(sl.x, cw);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'slot' + (sl.click ? ' click' : '');
+        el.dataset.k = sl.k;
+        board.appendChild(el);
+        slotEls[sl.k] = el;
+        s = slotSt[sl.k] = { x: NaN, y: NaN, t: null, cls: '' };
+      }
+      if (s.x !== sx || s.y !== sl.y) { setPos(el, sx, sl.y); s.x = sx; s.y = sl.y; }
+      var t = sl.t || '';
+      if (s.t !== t) { el.textContent = t; s.t = t; }
+      var cls = sl.cls || '';
+      if (s.cls !== cls) { el.classList.toggle('dead', cls === 'dead'); s.cls = cls; }
+    });
+    v.items.forEach(function (it) {
+      var c = it.c, el = els.get(c.id);
+      if (!el) return;
+      seen.add(c.id);
+      var ix = mx(it.x, cw);
+      pos.set(c.id, { x: ix, y: it.y });
+      var s = st.get(c.id);
+      if (s.gone) { el.classList.remove('gone'); s.gone = false; }
+      if (s.x !== ix || s.y !== it.y) { setPos(el, ix, it.y); s.x = ix; s.y = it.y; }
+      if (s.z !== it.z) { el.style.zIndex = it.z; s.z = it.z; }
+      var dn = !c.up;
+      if (s.down !== dn) {
+        el.classList.toggle('down', dn);
+        el.setAttribute('aria-label', dn ? 'Carta virada' : RANK_NAMES[c.r] + ' de ' + SUIT_NAMES[c.s]);
+        s.down = dn;
+      }
+      var fl = !!it.flat; if (s.flat !== fl) { el.classList.toggle('flat', fl); s.flat = fl; }
+      var dm = !!it.dim; if (s.dim !== dm) { el.classList.toggle('dim', dm); s.dim = dm; }
+      var sl = !!it.sel; if (s.sel !== sl) { el.classList.toggle('sel', sl); s.sel = sl; }
+      if (el.classList.contains('dragging')) el.classList.remove('dragging');
+    });
+    st.forEach(function (s, id) {
+      if (!seen.has(id) && !s.gone) { els.get(id).classList.add('gone'); s.gone = true; }
+    });
+    board.style.height = Math.ceil(v.h) + 'px';
+  }
+  function hud() {
+    $('hScore').textContent = S.score;
+    $('hTime').textContent = fmt(elapsed);
+    $('lvName').textContent = cur.name;
+    $('lvRules').textContent = cur.info(S);
+    var can = history.length > 0 && !busy && !ended;
+    $('btnUndo').disabled = !can;
+    $('btnUndoAll').disabled = !can;
+    $('btnHint').disabled = busy || ended;
+  }
+
+  // ---------- timer ----------
+  function startTimer() {
+    if (ended) return;
+    started = true;
+    if (timerId) return;
+    startTime = Date.now() - elapsed * 1000;
+    timerId = setInterval(function () {
+      elapsed = Math.floor((Date.now() - startTime) / 1000);
+      $('hTime').textContent = fmt(elapsed);
+    }, 500);
+  }
+  function stopTimer() { clearInterval(timerId); timerId = null; }
+
+  // ---------- actions ----------
+  function snapshot() {
+    history.push(JSON.stringify(S));
+    if (history.length > 300) history.shift();
+  }
+  function shake(uid) {
+    var el = els.get(uid);
+    if (!el) return;
+    el.classList.remove('nope');
+    void el.offsetWidth;
+    el.classList.add('nope');
+    setTimeout(function () { el.classList.remove('nope'); }, 320);
+  }
+  function act(fn, shakeUid) {
+    if (busy || ended) return;
+    var before = S.score;
+    snapshot();
+    var r = fn();
+    if (r === true) {
+      startTimer(); S.moves++; stuckShown = false;
+      markStarted();
+      snd(S.score > before ? 'good' : 'move');
+      buzz(8);
+      after();
+      persistSoon();
+    } else {
+      history.pop();
+      if (r === 'soft') { snd('move'); render(); }
+      else if (shakeUid != null) { shake(shakeUid); snd('bad'); buzz([16, 30, 16]); }
+    }
+  }
+  function undo() {
+    if (busy || ended || !history.length) return;
+    S = JSON.parse(history.pop());
+    undos++;
+    stuckShown = false;
+    hideOverlay();
+    snd('move');
+    render(); hud();
+    persistSoon();
+  }
+  function undoAll() {
+    if (busy || ended || !history.length) return;
+    S = JSON.parse(initialJSON);
+    history = [];
+    undos++;
+    stuckShown = false;
+    hideOverlay();
+    render(); hud();
+    toast('Mesa reiniciada.');
+    persistSoon();
+  }
+  function finish() {
+    if (cur.won(S)) { win(); return; }
+    if (cur.autoReady(S)) { autoFinish(); return; }
+    if (!ended && cur.stuck(S)) setTimeout(function () { if (!ended && !stuckShown && cur.stuck(S)) showStuck(); }, 450);
+  }
+  function after() {
+    render(); hud();
+    if (cfg.auto && cur.autoSafe && !cur.won(S)) {
+      if (cur.autoSafe(S)) { S.moves++; snd('good'); render(); hud(); safeLoop(); return; }
+    }
+    finish();
+  }
+  function safeLoop() {
+    busy = true; hud();
+    var tk = startToken;
+    var iv = setInterval(function () {
+      if (tk !== startToken || !S) { clearInterval(iv); return; }
+      var m = !cur.won(S) && cur.autoSafe(S);
+      if (m) { S.moves++; snd('good'); render(); hud(); }
+      if (!m) {
+        clearInterval(iv);
+        busy = false; hud(); persistSoon();
+        finish();
+      }
+    }, 130);
+  }
+  function autoFinish() {
+    busy = true;
+    hud();
+    var tk = startToken;
+    var iv = setInterval(function () {
+      if (tk !== startToken || !S) { clearInterval(iv); return; }
+      var moved = cur.autoStep(S);
+      if (moved) { S.moves++; snd('move'); }
+      render(); hud();
+      if (cur.won(S) || !moved) {
+        clearInterval(iv);
+        busy = false;
+        if (cur.won(S)) win(); else hud();
+      }
+    }, 110);
+  }
+
+  // ---------- hint ----------
+  function flash(el) {
+    if (!el) return;
+    el.classList.remove('hint');
+    void el.offsetWidth;
+    el.classList.add('hint');
+    setTimeout(function () { el.classList.remove('hint'); }, 1800);
+  }
+  function hint() {
+    if (busy || ended) return;
+    var h = cur.hint(S);
+    if (!h) { toast('Nenhuma jogada disponível.'); return; }
+    hints++;
+    (h.from || []).forEach(function (c) { flash(els.get(c.id)); });
+    if (h.to) {
+      if (h.to.card) flash(els.get(h.to.card.id));
+      else if (h.to.slot) flash(slotEls[h.to.slot]);
+    }
+    if (h.msg) toast(h.msg);
+    persistSoon();
+  }
+
+  // ---------- drag and tap ----------
+  function findDrop(grp, x, y) {
+    var best = null, bestA = 0;
+    cur.targets(S, grp).forEach(function (t) {
+      var tx = mx(t.x, t.w);
+      var ox = Math.max(0, Math.min(x + cw, tx + t.w) - Math.max(x, tx));
+      var oy = Math.max(0, Math.min(y + ch, t.y + t.h) - Math.max(y, t.y));
+      var a = ox * oy;
+      if (a > bestA) { bestA = a; best = t.dst; }
+    });
+    return bestA >= cw * ch * 0.15 ? best : null;
+  }
+  board.addEventListener('pointerdown', function (e) {
+    if (busy || ended || e.button > 0 || down) return;
+    var el = e.target.closest('.card');
+    if (!el) return;
+    var id = +el.dataset.id;
+    down = { id: id, x: e.clientX, y: e.clientY, drag: false, grp: cur.grab(S, id) };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+  });
+  function startDrag() {
+    down.drag = true;
+    down.grp.cards.forEach(function (c, k) {
+      var el = els.get(c.id);
+      el.classList.add('dragging');
+      el.style.zIndex = 1000 + k;
+      var s = st.get(c.id); if (s) { s.x = NaN; s.z = -1; }
+    });
+  }
+  function frame() {
+    raf = 0;
+    if (!down || !lastE) return;
+    var dx = lastE.clientX - down.x, dy = lastE.clientY - down.y;
+    if (!down.drag && down.grp && Math.hypot(dx, dy) > 7) startDrag();
+    if (down.drag) {
+      down.grp.cards.forEach(function (c) {
+        var p = pos.get(c.id);
+        setPos(els.get(c.id), p.x + dx, p.y + dy);
+      });
+    }
+  }
+  function onMove(e) {
+    if (!down) return;
+    lastE = e;
+    if (!raf) raf = requestAnimationFrame(frame);
+  }
+  function cleanup() {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onCancel);
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+  }
+  function onCancel() {
+    cleanup();
+    down = null;
+    if (S) render();
+  }
+  function onUp(e) {
+    cleanup();
+    var d = down;
+    down = null;
+    if (!d) return;
+    var dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (!d.drag && d.grp && Math.hypot(dx, dy) > 7) { down = d; startDrag(); d = down; down = null; }
+    if (d.drag) {
+      var p0 = pos.get(d.grp.cards[0].id);
+      var dst = findDrop(d.grp, p0.x + dx, p0.y + dy);
+      if (dst) act(function () { cur.move(S, d.grp.from, dst); return true; });
+      else render();
+    } else if (Math.hypot(dx, dy) < 14) {
+      act(function () { return cur.tap(S, d.id); }, d.id);
+    }
+  }
+  board.addEventListener('click', function (e) {
+    if (e.target.closest('.card')) return;
+    var sl = e.target.closest('.slot');
+    if (sl) act(function () { return cur.slotTap(S, sl.dataset.k); });
+  });
+
+  // ---------- panels ----------
+  function showPanel(html) {
+    overlay.innerHTML = '<div class="panel glass">' + html + '</div>';
+    overlay.removeAttribute('data-pos');
+    overlay.hidden = false;
+  }
+  function hideOverlay() { overlay.hidden = true; overlay.innerHTML = ''; overlay.removeAttribute('data-pos'); }
+  function win() {
+    ended = true;
+    stopTimer();
+    markStarted();
+    var bonus = Math.max(0, 900 - elapsed);
+    var total = S.score + bonus;
+    var r = PRG.stats[cur.id];
+    var prevBest = r.best, firstWin = r.wins === 0;
+    r.wins++; r.streak++;
+    r.bestStreak = Math.max(r.bestStreak, r.streak);
+    r.timeWins += elapsed;
+    var isBest = total > prevBest;
+    if (isBest) r.best = total;
+    if (!r.bestTime || elapsed < r.bestTime) r.bestTime = elapsed;
+    // keep the old record store in sync
+    rec[cur.id] = { wins: r.wins, best: r.best, bestTime: r.bestTime }; saveRec();
+    dropSave(cur.id);
+    savePrg();
+    snd('win'); buzz([30, 50, 30, 50, 90]);
+    evalAch({ win: true, time: elapsed, clean: hints === 0 && undos === 0, game: cur.id, peak: S.best || 0, total: total });
+    showPanel(
+      '<p class="eyebrow">' + cur.name + ' · concluído</p><h2>Mesa limpa</h2>' +
+      (isBest && !firstWin ? '<p>Novo recorde neste jogo.</p>' : (r.streak > 1 ? '<p>' + r.streak + ' vitórias seguidas.</p>' : '')) +
+      '<dl><div><dt>Pontos</dt><dd>' + S.score + '</dd></div>' +
+      '<div><dt>Bônus de tempo</dt><dd>' + bonus + '</dd></div>' +
+      '<div><dt>Total</dt><dd>' + total + '</dd></div>' +
+      '<div><dt>Tempo</dt><dd>' + fmt(elapsed) + '</dd></div>' +
+      '<div><dt>Jogadas</dt><dd>' + S.moves + '</dd></div></dl>' +
+      '<div class="row"><button class="btn primary" data-act="again" type="button">Jogar de novo</button>' +
+      '<button class="btn" data-act="menu" type="button">Voltar ao menu</button></div>');
+    hud();
+  }
+  function showStuck() {
+    stuckShown = true;
+    var canU = history.length > 0;
+    showPanel(
+      '<p class="eyebrow">' + cur.name + '</p><h2>Sem jogadas</h2>' +
+      '<p>' + (cur.solver ? 'Esta mesa tinha solução. Volte algumas jogadas e tente outro caminho.' : 'Não há mais movimentos possíveis. Volte algumas jogadas ou comece outra mesa.') + '</p>' +
+      '<div class="row">' +
+      (canU ? '<button class="btn primary" data-act="undo" type="button">Desfazer jogada</button>' : '') +
+      '<button class="btn' + (canU ? '' : ' primary') + '" data-act="again" type="button">Novo jogo</button>' +
+      '<button class="btn" data-act="peek" type="button">Ver a mesa</button></div>');
+  }
+  overlay.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]');
+    if (!b) { if (e.target === overlay && !overlay.querySelector('.wait')) hideOverlay(); return; }
+    var a = b.dataset.act;
+    if (a === 'again') startGame(cur.id, true);
+    else if (a === 'menu') showMenu();
+    else if (a === 'undo') undo();
+    else if (a === 'peek' || a === 'cancel') hideOverlay();
+    else if (a === 'restart') undoAll();
+  });
+
+  // ---------- flow ----------
+  function begin(g, state, o) {
+    stopTimer();
+    o = o || {};
+    cur = g; S = state;
+    initialJSON = o.init || JSON.stringify(S);
+    history = o.hist || [];
+    elapsed = o.el || 0; started = !!o.counted; ended = false; busy = false; stuckShown = false; down = null;
+    counted = !!o.counted; hints = o.h || 0; undos = o.u || 0;
+    hideOverlay();
+    menu.hidden = true; mdock.hidden = true;
+    game.hidden = false; dock.hidden = false;
+    window.scrollTo(0, 0);
+    buildBoard();
+    layout();
+    render();
+    hud();
+  }
+  function startGame(id, fresh) {
+    var g = GAMES[id];
+    lastGame = id;
+    try { localStorage.setItem(KEY2, id); } catch (e) {}
+    startToken++;
+    if (!fresh && SAVES[id]) {
+      try {
+        var sv = SAVES[id];
+        begin(g, JSON.parse(sv.s), { init: sv.init, hist: sv.hist, el: sv.el, counted: true, h: sv.h, u: sv.u });
+        return;
+      } catch (e) { dropSave(id); }
+    }
+    if (fresh) abandon(id);
+    var token = ++startToken, done = false;
+    getDeal(id, function (d) {
+      if (token !== startToken) return;
+      done = true;
+      begin(g, g.init(d));
+    });
+    if (!done) {
+      showPanel('<div class="wait"><div class="spinner" aria-hidden="true"></div><h2>Embaralhando</h2>' +
+        '<p>Procurando uma mesa de ' + g.name + ' que tenha solução.</p></div>');
+    }
+  }
+  function showMenu() {
+    startToken++;
+    persist();
+    stopTimer();
+    busy = false;
+    hideOverlay();
+    paintMenu();
+    game.hidden = true; dock.hidden = true;
+    menu.hidden = false; mdock.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- menu ----------
+  var CHECK = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  var LOCK = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="11" width="12" height="9" rx="2"/><path d="M9 11V8a3 3 0 0 1 6 0v3"/></svg>';
+  function pct(a, b) { return b ? Math.round(100 * a / b) + '%' : '–'; }
+  function paintMenu() {
+    var cleared = ORDER.filter(function (k) { return PRG.stats[k].wins; }).length;
+    $('secCount').textContent = cleared + '/5 vencidos';
+    $('games').innerHTML = ORDER.map(function (k) {
+      var m = META[k], won = PRG.stats[k].wins, live = !!SAVES[k];
+      return '<button class="gtile" type="button" data-game="' + k + '" style="--c: ' + m.color + '">' +
+        '<span class="gt-art" aria-hidden="true">' + ART[k] + '</span>' +
+        '<span><span class="gt-name">' + GAMES[k].name + '</span>' +
+        (live ? '<span class="gt-live">Em andamento</span>' : '<span class="gt-sub">' + m.sub + '</span>') + '</span>' +
+        (won ? '<span class="gt-badge" aria-label="Já venceu">' + CHECK + '</span>' : '') + '</button>';
+    }).join('');
+
+    var t = totals(), unlocked = ACH.filter(function (a) { return PRG.ach[a.id]; }).length;
+    var bestNow = 0; ORDER.forEach(function (k) { bestNow = Math.max(bestNow, PRG.stats[k].streak); });
+    var html = '<div class="sumgrid">' +
+      '<div class="sum glass"><b>' + t.played + '</b><span>Partidas</span></div>' +
+      '<div class="sum glass"><b>' + t.wins + '</b><span>Vitórias</span></div>' +
+      '<div class="sum glass"><b>' + pct(t.wins, t.played) + '</b><span>Taxa</span></div>' +
+      '<div class="sum glass"><b>' + bestNow + '</b><span>Sequência</span></div></div>';
+    html += ORDER.map(function (k) {
+      var m = META[k], r = PRG.stats[k];
+      return '<div class="row-card one" style="--c: ' + m.color + '"><span class="rc-main">' +
+        '<span class="rc-title"><b>' + GAMES[k].name + '</b></span>' +
+        '<span class="mini"><div><b>' + r.played + '</b><span>Partidas</span></div>' +
+        '<div><b>' + r.wins + '</b><span>Vitórias</span></div>' +
+        '<div><b>' + pct(r.wins, r.played) + '</b><span>Taxa</span></div>' +
+        '<div><b>' + r.streak + ' · ' + r.bestStreak + '</b><span>Seq. · máx.</span></div>' +
+        '<div><b>' + (r.wins ? fmt(Math.round(r.timeWins / r.wins)) : '–') + '</b><span>Tempo médio</span></div>' +
+        '<div><b>' + (r.wins ? fmt(r.bestTime) : '–') + '</b><span>Melhor tempo</span></div></span>' +
+        '<span class="rc-rec">Melhor pontuação: ' + (r.wins ? r.best : '–') + '</span></span></div>';
+    }).join('');
+    $('recList').innerHTML = html;
+
+    $('achCount').textContent = unlocked + '/' + ACH.length;
+    $('achList').innerHTML = ACH.map(function (a) {
+      var on = !!PRG.ach[a.id], v = a.n ? a.n() : null;
+      return '<div class="ach' + (on ? ' on' : '') + '"><span class="chk' + (on ? ' on' : '') + '">' + (on ? CHECK : LOCK) + '</span>' +
+        '<span class="ach-main"><b>' + a.name + '</b><span>' + a.desc + '</span>' +
+        (a.th ? '<span class="rw' + (on ? ' done' : '') + '">' + (on ? 'Tema liberado: ' : 'Libera o tema ') + themeById(a.th).name + '</span>' : '') +
+        (v && !on ? '<span class="bar"><i style="width:' + Math.round(100 * v[0] / v[1]) + '%"></i></span><em>' + v[0] + ' / ' + v[1] + '</em>' : '') +
+        '</span></div>';
+    }).join('');
+
+    $('helpList').innerHTML = ORDER.map(function (k) {
+      var m = META[k];
+      return '<div class="row-card one" style="--c: ' + m.color + '"><span class="help-block"><h3>' + GAMES[k].name + '</h3>' +
+        '<ul class="help-list">' + m.help.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></span></div>';
+    }).join('');
+    paintCfg();
+  }
+  var CFGROWS = [
+    ['sound', 'Som', 'Efeitos ao jogar, acertar e vencer.'],
+    ['vibrate', 'Vibração', 'Resposta tátil nas jogadas (se o aparelho tiver).'],
+    ['left', 'Modo canhoto', 'Espelha a mesa: fundações e baralho passam para o outro lado.'],
+    ['suits4', 'Naipes em 4 cores', 'Espadas pretas, copas vermelhas, ouros azuis e paus verdes.']
+  ];
+  var SPEEDNAMES = [['lenta', 'Lenta'], ['normal', 'Normal'], ['rapida', 'Rápida'], ['off', 'Sem']];
+  function paintCfg() {
+    var open = THEMES.filter(themeOpen).length;
+    var thHtml = '<div class="row-card one"><span class="rc-main"><span class="rc-title"><b>Tema</b></span>' +
+      '<span class="rc-rec">' + open + ' de ' + THEMES.length + ' liberados. Os outros se desbloqueiam com conquistas.</span>' +
+      '<span class="themes">' + THEMES.map(function (t) {
+        var ok = themeOpen(t), a = t.ach ? achById(t.ach) : null;
+        return '<button type="button" class="th' + (cfg.theme === t.id ? ' on' : '') + (ok ? '' : ' lock') + '" data-theme-id="' + t.id + '" aria-label="' + t.name + (ok ? '' : ' (bloqueado)') + '">' +
+          '<span class="pv" style="background: linear-gradient(135deg, ' + t.g[0] + ', ' + t.g[1] + ')"><i class="a" style="background: ' + t.bk + '"></i><i class="b" style="background: ' + t.bk + '"></i><em style="background: ' + t.acc + '"></em></span>' +
+          '<b>' + t.name + '</b><small>' + (cfg.theme === t.id ? 'Em uso' : ok ? (a ? 'Liberado' : 'Padrão') : 'Conquista: ' + a.name) + '</small></button>';
+      }).join('') + '</span></span></div>';
+    $('cfgList').innerHTML = thHtml + CFGROWS.map(function (r) {
+      return '<button class="row-card two cfg" type="button" role="switch" aria-checked="' + !!cfg[r[0]] + '" data-cfg="' + r[0] + '">' +
+        '<span class="rc-main"><span class="rc-title"><b>' + r[1] + '</b></span><span class="rc-rec">' + r[2] + '</span></span>' +
+        '<span class="sw' + (cfg[r[0]] ? ' on' : '') + '" aria-hidden="true"></span></button>';
+    }).join('') +
+      '<div class="row-card one"><span class="rc-main"><span class="rc-title"><b>Velocidade das animações</b></span>' +
+      '<span class="seg" role="radiogroup">' + SPEEDNAMES.map(function (s) {
+        return '<button type="button" role="radio" aria-checked="' + (cfg.speed === s[0]) + '" class="' + (cfg.speed === s[0] ? 'on' : '') + '" data-speed="' + s[0] + '">' + s[1] + '</button>';
+      }).join('') + '</span></span></div>' +
+      '<button class="row-card one cfg danger" type="button" data-reset="1"><span class="rc-main"><span class="rc-title"><b id="lReset">Apagar progresso</b></span>' +
+      '<span class="rc-rec">Zera estatísticas, conquistas e partidas salvas.</span></span></button>' +
+      '<p class="ver"><span>Paciência · versão <b>' + APP_VERSION + '</b></span><span>atualizado em ' + APP_DATE + '</span></p>';
+  }
+  function setTab(t) {
+    tab = t;
+    ['Play', 'Rec', 'Help', 'Cfg'].forEach(function (n) { $('tab' + n).hidden = (n !== t); });
+    Array.prototype.forEach.call(mdock.querySelectorAll('.tab'), function (b) { b.classList.toggle('on', b.dataset.tab === t); });
+    $('btnCfg').classList.toggle('on', t === 'Cfg');
+    $('btnCfg').setAttribute('aria-pressed', String(t === 'Cfg'));
+    window.scrollTo(0, 0);
+  }
+
+  var resetArmed = false, resetT = 0;
+  function resetAll() {
+    PRG = { stats: {}, ach: {}, days: [] };
+    ORDER.forEach(function (k) { PRG.stats[k] = blank(); });
+    PRG.ach.welcome = Date.now();
+    SAVES = {}; rec = {};
+    applyTheme(); saveCfg();
+    saveRec(); savePrg(); writeSaves();
+    paintMenu();
+    toast('Progresso apagado.');
+  }
+  mdock.addEventListener('click', function (e) {
+    var b = e.target.closest('.tab');
+    if (b) setTab(b.dataset.tab);
+  });
+  menu.addEventListener('click', function (e) {
+    if (e.target.closest('#btnCfg')) { setTab(tab === 'Cfg' ? 'Play' : 'Cfg'); return; }
+    var g = e.target.closest('[data-game]');
+    if (g) { audio(); startGame(g.dataset.game); return; }
+    var th = e.target.closest('[data-theme-id]');
+    if (th) {
+      var tt = themeById(th.dataset.themeId);
+      if (!themeOpen(tt)) { toast('Bloqueado: conclua a conquista "' + achById(tt.ach).name + '".'); snd('bad'); return; }
+      cfg.theme = tt.id; saveCfg(); applyTheme(); snd('good'); paintCfg();
+      return;
+    }
+    var c = e.target.closest('[data-cfg]');
+    if (c) {
+      var k = c.dataset.cfg;
+      cfg[k] = !cfg[k];
+      saveCfg(); applyTheme();
+      if (k === 'sound' && cfg.sound) snd('good');
+      if (k === 'vibrate' && cfg.vibrate) buzz(30);
+      paintCfg();
+      return;
+    }
+    var sp = e.target.closest('[data-speed]');
+    if (sp) { cfg.speed = sp.dataset.speed; saveCfg(); applyCfg(); paintCfg(); return; }
+    if (e.target.closest('[data-reset]')) {
+      var l = $('lReset');
+      if (!resetArmed) {
+        resetArmed = true; l.textContent = 'Toque de novo para confirmar';
+        clearTimeout(resetT);
+        resetT = setTimeout(function () { resetArmed = false; if ($('lReset')) $('lReset').textContent = 'Apagar progresso'; }, 3000);
+      } else { clearTimeout(resetT); resetArmed = false; resetAll(); }
+    }
+  });
+  $('btnBack').addEventListener('click', showMenu);
+  $('btnUndo').addEventListener('click', undo);
+  function askRestart() {
+    if (busy || ended || !history.length) return;
+    showPanel('<p class="eyebrow">' + cur.name + '</p><h2>Reiniciar a mesa?</h2>' +
+      '<p>Todas as jogadas voltam ao início desta mesma distribuição. Você perde o progresso desta tentativa.</p>' +
+      '<div class="row"><button class="btn primary" data-act="restart" type="button">Reiniciar</button>' +
+      '<button class="btn" data-act="cancel" type="button">Cancelar</button></div>');
+  }
+  $('btnUndoAll').addEventListener('click', askRestart);
+  $('btnHint').addEventListener('click', hint);
+  $('btnNew').addEventListener('click', function () {
+    var b = $('btnNew');
+    if (!newArmed) {
+      newArmed = true;
+      $('lNew').textContent = 'Confirmar?';
+      b.classList.add('arm');
+      clearTimeout(newTimer);
+      newTimer = setTimeout(function () { newArmed = false; $('lNew').textContent = 'Novo'; b.classList.remove('arm'); }, 2500);
+    } else {
+      clearTimeout(newTimer);
+      newArmed = false;
+      $('lNew').textContent = 'Novo';
+      b.classList.remove('arm');
+      startGame(cur.id, true);
+    }
+  });
+  var rz = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(rz);
+    rz = setTimeout(function () { if (S && cur && !game.hidden) { layout(); render(); } }, 80);
+  });
+  function flush() { persist(); savePrg(); }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) flush(); });
+  window.addEventListener('pagehide', flush);
+
+  initWorker();
+  paintMenu();
+  setTab('Play');
+})();
+</script>
+<script>
+(function () {
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  var btn = document.getElementById('btnInstall'), ios = document.getElementById('iosHint'), deferred = null;
+  if (!standalone) {
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; btn.hidden = false; });
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) ios.hidden = false;
+  }
+  btn.addEventListener('click', function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function () { deferred = null; btn.hidden = true; });
+  });
+  window.addEventListener('appinstalled', function () { btn.hidden = true; ios.hidden = true; });
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+})();
+</script>
+</body>
+</html>
